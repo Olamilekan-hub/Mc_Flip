@@ -1,18 +1,24 @@
-
 import { type DefaultSession, type NextAuthConfig } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { object, string, enum as zodEnum } from "zod";
+import { object, string } from "zod";
 import { loginUser, registerUser } from "../../lib/firebase";
 
 // Define schema for user authentication
 export const signInSchema = object({
   username: string({ required_error: "Username is required" }).min(5, "Username is required"),
-  email: string({ required_error: "email is required" }).min(5, "email is required"),
   password: string({ required_error: "Password is required" })
     .min(1, "Password is required")
     .min(8, "Password must be at least 8 characters")
     .max(32, "Password must be less than 32 characters"),
-  newUser: zodEnum(["true", "false"]).optional().default("false"),
+});
+
+export const signUpSchema = object({
+  username: string({ required_error: "Username is required" }).min(5, "Username is required"),
+  email: string({ required_error: "Email is required" }).email("Invalid email format"),
+  password: string({ required_error: "Password is required" })
+    .min(1, "Password is required")
+    .min(8, "Password must be at least 8 characters")
+    .max(32, "Password must be less than 32 characters"),
 });
 
 /**
@@ -35,17 +41,14 @@ export const authConfig = {
       name: "Credentials",
       credentials: {
         username: { label: "Username", type: "text" },
-        email: { label: "email", type: "text" },
+        email: { label: "Email", type: "text", optional: true },
         password: { label: "Password", type: "password" },
-        newUser: { label: "New User", type: "boolean" },
+        newUser: { label: "New User", type: "boolean", optional: true },
       },
       async authorize(credentials) {
-        // Validate input credentials using Zod schema
-        const { username, email, password, newUser } = await signInSchema.parseAsync(credentials);
-
-        if (newUser === "true") {
+        if (credentials.newUser === "true") {
           try {
-            // Register the user in Firebase Authentication and Firestore
+            const { username, email, password } = await signUpSchema.parseAsync(credentials);
             const createdUser = await registerUser(username, email, password);
             return { id: createdUser.uid, name: username, email: email };
           } catch (error) {
@@ -54,7 +57,7 @@ export const authConfig = {
           }
         } else {
           try {
-            // Authenticate existing user using username
+            const { username, password } = await signInSchema.parseAsync(credentials);
             const user = await loginUser(username, password);
             return { id: user.uid, name: username };
           } catch (error) {
@@ -68,7 +71,7 @@ export const authConfig = {
   callbacks: {
     session: ({ session, token }) => {
       if (token && session.user) {
-        session.user.id = token.sub ?? ""; // Assign Firebase user ID to session
+        session.user.id = token.sub ?? ""; 
       }
       return session;
     },

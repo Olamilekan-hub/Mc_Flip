@@ -1,0 +1,45 @@
+[
+  {
+    "id": "b542b6a3-2493-42a0-95be-2cda4c03eb01",
+    "kind": "item",
+    "description": "PICKAXE GLITTERING PETS GO",
+    "owner": "us-east-1:06861ad2-c743-4b33-91de-efa7e1be090e",
+    "category": "DIGITAL_INGAME",
+    "name": "PICKAXE GLITTERING PETS GO",
+    "price": 3249,
+    "accept_currency": "USD",
+    "upc": "GF0000ROBLOX",
+    "cognitoidp_client": "marketplace",
+    "tags": [
+      "type: Other",
+      "roblox_game: PETS GO"
+    ],
+    "digital": true,
+    "digital_region": "none",
+    "digital_deliverable": "transfer",
+    "photo": {
+      "24964ff4-6ae0-478a-abf2-e55af28e2ed7": {
+        "display_order": 0,
+        "status": "active",
+        "view_url": "https://production-gameflipusercontent.fingershock.com/us-east-1:06861ad2-c743-4b33-91de-efa7e1be090e/b542b6a3-2493-42a0-95be-2cda4c03eb01/24964ff4-6ae0-478a-abf2-e55af28e2ed7"
+      }
+    },
+    "status": "onsale",
+    "shipping_predefined_package": "None",
+    "shipping_fee": 0,
+    "shipping_paid_by": "seller",
+    "shipping_within_days": 1,
+    "expire_in_days": 7,
+    "expiration": "2025-02-14T12:33:58.637Z",
+    "visibility": "public",
+    "seller_id_verified": "2021-04-25T13:09:05.484Z",
+    "seller_score": 0.9943428784017977,
+    "seller_ratings": 3196,
+    "created": "2025-02-07T12:33:56.088Z",
+    "updated": "2025-02-07T12:33:58.637Z",
+    "version": "3",
+    "image_urls": [
+      "gameflip_data_20250207_164158\\images\\b542b6a3-2493-42a0-95be-2cda4c03eb01_24964ff4-6ae0-478a-abf2-e55af28e2ed7.jpg"
+    ]
+  }
+]

@@ -1,0 +1,51 @@
+[
+  {
+    "id": "6b934e1c-8ce3-412d-a15c-fd44a4722e48",
+    "kind": "item",
+    "description": "Caps\n\n",
+    "owner": "us-east-1:6591966e-f6ab-477f-aad6-395646fc8d73",
+    "category": "DIGITAL_INGAME",
+    "name": "Caps",
+    "platform": "xbox_one",
+    "price": 299,
+    "accept_currency": "USD",
+    "upc": "GFXOFLLOUT76",
+    "cognitoidp_client": "marketplace",
+    "tags": [
+      "type: Caps",
+      "quantity: 1x"
+    ],
+    "digital": true,
+    "digital_region": "none",
+    "digital_deliverable": "transfer",
+    "photo": {
+      "a0e2cace-8260-4b33-952d-56f0db552a6f": {
+        "status": "active",
+        "view_url": "https://production-gameflipusercontent.fingershock.com/us-east-1:6591966e-f6ab-477f-aad6-395646fc8d73/6b934e1c-8ce3-412d-a15c-fd44a4722e48/a0e2cace-8260-4b33-952d-56f0db552a6f"
+      },
+      "3e2875bf-4453-4972-9fa6-91e1c28c4ec8": {
+        "display_order": 1,
+        "status": "active",
+        "view_url": "https://production-gameflipusercontent.fingershock.com/us-east-1:6591966e-f6ab-477f-aad6-395646fc8d73/6b934e1c-8ce3-412d-a15c-fd44a4722e48/3e2875bf-4453-4972-9fa6-91e1c28c4ec8"
+      }
+    },
+    "cover_photo": "a0e2cace-8260-4b33-952d-56f0db552a6f",
+    "status": "onsale",
+    "shipping_predefined_package": "None",
+    "shipping_fee": 0,
+    "shipping_paid_by": "seller",
+    "shipping_within_days": 3,
+    "expire_in_days": 30,
+    "expiration": "2025-03-09T12:33:56.034Z",
+    "visibility": "public",
+    "seller_score": 0.9937212507289469,
+    "seller_ratings": 6328,
+    "created": "2025-02-07T12:33:53.712Z",
+    "updated": "2025-02-07T12:33:56.034Z",
+    "version": "5",
+    "image_urls": [
+      "gameflip_data_20250207_172603\\images\\6b934e1c-8ce3-412d-a15c-fd44a4722e48_a0e2cace-8260-4b33-952d-56f0db552a6f.jpg",
+      "gameflip_data_20250207_172603\\images\\6b934e1c-8ce3-412d-a15c-fd44a4722e48_3e2875bf-4453-4972-9fa6-91e1c28c4ec8.jpg"
+    ]
+  }
+]
