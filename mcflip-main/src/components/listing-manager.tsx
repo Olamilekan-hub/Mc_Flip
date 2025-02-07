@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import axios from 'axios';
 import { Button } from "~/components/ui/button"
 import { Card } from "~/components/ui/card"
 import { Checkbox } from "~/components/ui/checkbox"
@@ -24,6 +25,11 @@ export function ListingManager() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
+  interface ResponseData {
+    data?: { id: string; name: string; image_urls: string[]; price?: number }[];
+  }
+
+  const [responseData, setResponseData] = useState<ResponseData | null>(null);
 
   const listings = [
     { id: '1', name: '20k floor launchers', icon: '📦' },
@@ -56,20 +62,79 @@ export function ListingManager() {
     }
   }
 
-  const handleImport = async () => {
-    setIsImporting(true)
+  let dataResponse = responseData;
+
+  const handlePostListing = async () => {
+    setIsProcessing(true);
     try {
-      const urls = importUrls.split('\n').filter(url => url.trim() !== '')
-      console.log(`Importing ${urls.length} URLs:`, urls)
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Example: Posting first selected listing
+      if (dataResponse.length === 0) {
+        console.log("No listings selected for posting.");
+        return;
+      }
+      console.log(dataResponse)
+  
+      const selectedListing = listings.find(item => item.id === dataResponse.id);
+
+      // const selectedListing = dataResponse
+      console.log(selectedListing);
+  
+      if (!selectedListing) {
+        console.error("Selected listing not found.");
+        return;
+      }
+  
+      const listingData = {
+        listing: {
+          name: selectedListing.name,
+          description: "Example description",
+          price: 109900,  // Set a dynamic price if needed
+          // Add more fields as required by your API
+        }
+      };
+  
+      console.log("Posting listing:", listingData);
+  
+      const response = await axios.post("http://localhost:8000/api/post-listing", dataResponse?.data);
+  
+      console.log("Listing posted successfully:", response.data);
+      alert("Listing created successfully!");
     } catch (error) {
-      console.error('Error importing URLs:', error)
+      console.error("Error posting listing:", error);
+      alert("Failed to create listing.");
     } finally {
-      setIsImporting(false)
-      setIsImportModalOpen(false)
-      setImportUrls("")
+      setIsProcessing(false);
     }
-  }
+  };
+  
+ 
+
+    const handleImport = async () => {
+      setIsImporting(true)
+      try {
+        const urls = importUrls.split('\n').filter(url => url.trim() !== '')
+        console.log(`Importing ${urls.length} URLs:`, urls)
+
+        const response = await axios.post("http://localhost:8000/api/import-listings", { urls });
+
+      // Handle response: Show data and JSON file location
+      console.log("Import successful:", response.data);
+      // dataResponse = response.data
+      setResponseData(response.data);
+      console.log(setResponseData)
+      console.log(responseData.data[0])
+
+
+      } catch (error) {
+        console.error('Error importing URLs:', error)
+
+
+      } finally {
+        setIsImporting(false)
+        setIsImportModalOpen(false)
+        setImportUrls("")
+      }
+    }  
 
   const handleDelete = async () => {
     setIsDeleting(true)
@@ -142,7 +207,8 @@ export function ListingManager() {
                       ? 'bg-destructive hover:bg-destructive/90' 
                       : 'bg-accent hover:bg-accent/90'
                 } text-accent-foreground`}
-                onClick={handlePostingToggle}
+                // onClick={handlePostingToggle}
+                onClick={handlePostListing} 
                 disabled={isProcessing}
               >
                 {isProcessing 
@@ -202,7 +268,32 @@ export function ListingManager() {
               <label htmlFor="select-all" className="text-sm text-white">Select All</label>
             </div>
           </div>
+
+
           <div className="space-y-2">
+          {responseData?.data && (
+              <div className="space-y-2">
+                {responseData.data.map((item: { id: string; name: string; image_urls: string[]; price?: number }) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center space-x-3 p-2 rounded-lg border border-border hover:bg-accent hover:text-accent-foreground text-white text-xl"
+                  >
+                    <Switch
+                  checked={selectedItems.includes(item.id)}
+                  onCheckedChange={(checked) => handleItemSelect(item.id, checked)}
+                />
+                    <img
+                      src={`http://localhost:8000/static/${item.image_urls[0]}`}
+                      alt={item.name}
+                      className="w-10 h-10 rounded-full"
+                    />
+                    <span className="text-xl">{item.name}</span>
+                    <span>{item.price ? `$${item.price}` : "Price not available"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            
             {filteredListings.map((item) => (
               <div
                 key={item.id}
@@ -216,6 +307,8 @@ export function ListingManager() {
                 <span>{item.name}</span>
               </div>
             ))}
+
+      
           </div>
         </Card>
       </div>

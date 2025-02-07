@@ -11,6 +11,7 @@ import { useState } from "react"
 export function LoginRegisterCard() {
   const [isLoading, setIsLoading] = useState(false)
   const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
@@ -61,6 +62,7 @@ export function LoginRegisterCard() {
     try {
       const result = await signIn("credentials", {
         username,
+        email,
         password,
         newUser: "true",
         callbackUrl: "/dashboard",
@@ -142,6 +144,17 @@ export function LoginRegisterCard() {
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-email">Email</Label>
+                    <Input 
+                      id="new-email" 
+                      placeholder="johndoe@email.com" 
+                      required 
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
