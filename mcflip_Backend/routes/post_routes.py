@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from typing import List
 import aiohttp
 import asyncio
 import pyotp
@@ -23,21 +24,13 @@ API_SECRET = os.getenv("API_SECRET")
 # Generate OTP authentication instance using API secret
 totp = pyotp.TOTP(API_SECRET)
 
-# Function to create authentication headers for API requests
 def get_auth_headers(content_type="application/json"):
-    """
-    Generates headers required for API authentication, including OTP.
-    """
     return {
         "Authorization": f"GFAPI {API_KEY}:{totp.now()}",
         "Content-Type": content_type
     }
 
-# Function to make API requests with retry logic
 async def api_request(session, method, endpoint, data=None, retries=3):
-    """
-    Sends an API request and retries if an OTP error occurs.
-    """
     url = BASE_URL + endpoint
     content_type = "application/json-patch+json" if method.upper() == 'PATCH' else "application/json"
     for attempt in range(retries):
@@ -46,112 +39,86 @@ async def api_request(session, method, endpoint, data=None, retries=3):
             async with getattr(session, method.lower())(url, headers=headers, json=data) as response:
                 response_data = await response.json()
                 if response.status == 200:
-                    return response_data  # Return response if successful
+                    return response_data
                 elif response_data.get('error', {}).get('message') == 'Invalid api otp':
                     logging.warning("Invalid OTP. Retrying...")
-                    await asyncio.sleep(1)  # Wait before retrying with a new OTP
+                    await asyncio.sleep(1)
                 else:
                     logging.error(f"API request failed: {response_data}")
                     return None
         except Exception as e:
             logging.error(f"Request error: {str(e)}")
-            await asyncio.sleep(1)  # Wait before retrying
+            await asyncio.sleep(1)
     return None
 
-# Pydantic model to validate incoming listing data
-class ListingData(BaseModel):
-    listing: dict  # Dictionary containing listing details
+# Pydantic models
+class ListingModel(BaseModel):
+    id: str
+    kind: str
+    description: str
+    owner: str
+    category: str
+    name: str
+    price: int
+    accept_currency: str
+    upc: str
+    cognitoidp_client: str
+    tags: List[str]
+    digital: bool
+    digital_deliverable: str
+    photo: dict
+    status: str
+    shipping_fee: int
+    shipping_paid_by: str
+    shipping_within_days: int
+    expire_in_days: int
+    visibility: str
 
-# Endpoint to post a new listing
-@router.post("/post-listing")
-async def post_listing(data: ListingData):
+class ListingsData(BaseModel):
+    listings: List[ListingModel]
+
+class ListingData(BaseModel):
+    listing: dict
+
+@router.post("/post-listings")
+async def post_listings(data: ListingsData):
     """
-    Creates a new listing on Gameflip.
+    Creates multiple listings on Gameflip.
     """
     async with aiohttp.ClientSession() as session:
-        response = await api_request(session, 'POST', '/listing', data=data.listing)
-        if response and response.get('status') == 'SUCCESS':
-            return {"message": "Listing created successfully", "data": response['data']}
-        raise HTTPException(status_code=400, detail="Failed to create listing")
-
-
-# from fastapi import APIRouter, HTTPException
-# from pydantic import BaseModel
-# import aiohttp
-# import asyncio
-# import logging
-# import os
-# from utils.auth import get_auth_headers
-# from utils.file_handler import load_listings
-
-# # Configure logging
-# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# router = APIRouter()
-# BASE_URL = os.getenv("BASE_URL")
-
-# # Function to make API requests with retry logic
-# async def api_request(session, method, endpoint, data=None, retries=3):
-#     """
-#     Sends an API request and retries if an OTP error occurs.
-#     """
-#     url = BASE_URL + endpoint
-#     content_type = "application/json-patch+json" if method.upper() == 'PATCH' else "application/json"
-    
-#     for attempt in range(retries):
-#         headers = get_auth_headers(content_type)
-#         try:
-#             async with getattr(session, method.lower())(url, headers=headers, json=data) as response:
-#                 response_data = await response.json()
-#                 if response.status == 200:
-#                     return response_data  # Return response if successful
-#                 elif response_data.get('error', {}).get('message') == 'Invalid api otp':
-#                     logging.warning("Invalid OTP. Retrying...")
-#                     await asyncio.sleep(1)  # Wait before retrying
-#                 else:
-#                     logging.error(f"API request failed: {response_data}")
-#                     return None
-#         except Exception as e:
-#             logging.error(f"Request error: {str(e)}")
-#             await asyncio.sleep(1)  # Wait before retrying
-#     return None
-
-# # Pydantic model to validate incoming listing data
-# class ListingData(BaseModel):
-#     listing: dict  # Dictionary containing listing details
-
-# # Endpoint to post all listings from JSON file
-# @router.post("/post-listings")
-# async def post_listings():
-#     """
-#     Posts all imported listings to Gameflip.
-#     """
-#     listings = load_listings()
-
-#     if not listings:
-#         raise HTTPException(status_code=400, detail="No listings found in listings.json")
-
-#     async with aiohttp.ClientSession() as session:
-#         results = []
-#         for listing in listings:
-#             logging.info(f"Posting listing: {listing.get('name', 'Unknown')}")
+        results = []
+        for listing in data.listings:
+            logging.info(f"Posting listing: {listing.name}")
             
-#             # Ensure image paths are converted if necessary
-#             if "image_urls" in listing:
-#                 listing["photo"] = await handle_images(listing["image_urls"])
+            response = await api_request(session, 'POST', '/listing', data=listing.dict())
+            if response and response.get('status') == 'SUCCESS':
+                results.append({
+                    "listing": listing.name,
+                    "status": "Success",
+                    "data": response['data']
+                })
+            else:
+                results.append({
+                    "listing": listing.name,
+                    "status": "Failed"
+                })
 
-#             response = await api_request(session, 'POST', '/listing', data=listing)
-#             if response and response.get('status') == 'SUCCESS':
-#                 results.append({"listing": listing.get("name", "Unknown"), "status": "Success"})
-#             else:
-#                 results.append({"listing": listing.get("name", "Unknown"), "status": "Failed"})
+        successful_listings = len([r for r in results if r["status"] == "Success"])
+        if successful_listings == 0:
+            raise HTTPException(status_code=400, detail="Failed to create any listings")
 
-#     return {"message": "Listings processed", "results": results}
+        return {
+            "message": f"Successfully created {successful_listings} out of {len(data.listings)} listings",
+            "results": results
+        }
 
-# # Function to handle local image conversion
-# async def handle_images(image_paths):
+# @router.post("/post-listing")
+# async def post_listing(data: ListingData):
 #     """
-#     Converts local image paths to a format required for upload.
+#     Creates a single listing on Gameflip.
 #     """
-#     # If images need to be uploaded first, implement that logic here
-#     return {str(i): {"view_url": path} for i, path in enumerate(image_paths)}
+#     async with aiohttp.ClientSession() as session:
+#         response = await api_request(session, 'POST', '/listing', data=data.listing)
+#         if response and response.get('status') == 'SUCCESS':
+#             return {"message": "Listing created successfully", "data": response['data']}
+#         raise HTTPException(status_code=400, detail="Failed to create listing")

@@ -62,46 +62,65 @@ export function ListingManager() {
     }
   }
 
-  let dataResponse = responseData;
+  let dataResponse = responseData?.data;
 
   const handlePostListing = async () => {
     setIsProcessing(true);
+    
     try {
-      // Example: Posting first selected listing
-      if (dataResponse.length === 0) {
-        console.log("No listings selected for posting.");
-        return;
-      }
-      console.log(dataResponse)
-  
-      const selectedListing = listings.find(item => item.id === dataResponse.id);
-
-      // const selectedListing = dataResponse
-      console.log(selectedListing);
-  
-      if (!selectedListing) {
-        console.error("Selected listing not found.");
+      // Validate if there's data to process
+      if (!dataResponse || dataResponse.length === 0) {
+        console.log("No listing data available for posting.");
         return;
       }
   
-      const listingData = {
-        listing: {
-          name: selectedListing.name,
-          description: "Example description",
-          price: 109900,  // Set a dynamic price if needed
-          // Add more fields as required by your API
-        }
+      // Format the data according to the API's expected structure
+      const formattedData = {
+        listings: dataResponse.map(listing => ({
+          id: listing.id,
+          kind: listing.kind,
+          description: listing.description,
+          owner: listing.owner,
+          category: listing.category,
+          name: listing.name,
+          price: listing.price,
+          accept_currency: listing.accept_currency,
+          upc: listing.upc,
+          cognitoidp_client: listing.cognitoidp_client,
+          tags: listing.tags,
+          digital: listing.digital,
+          digital_deliverable: listing.digital_deliverable,
+          photo: listing.photo,
+          status: listing.status,
+          shipping_fee: listing.shipping_fee,
+          shipping_paid_by: listing.shipping_paid_by,
+          shipping_within_days: listing.shipping_within_days,
+          expire_in_days: listing.expire_in_days,
+          visibility: listing.visibility
+        }))
       };
   
-      console.log("Posting listing:", listingData);
+      console.log("Posting listings:", formattedData);
   
-      const response = await axios.post("http://localhost:8000/api/post-listing", dataResponse?.data);
+      // Make the API call with the properly formatted data
+      const response = await axios.post(
+        "http://localhost:8000/api/post-listings", 
+        formattedData
+      );
   
-      console.log("Listing posted successfully:", response.data);
-      alert("Listing created successfully!");
+      if (response.data?.message) {
+        console.log("Listings posted successfully:", response.data);
+        alert(response.data.message);
+      } else {
+        throw new Error("Invalid response from server");
+      }
+  
     } catch (error) {
-      console.error("Error posting listing:", error);
-      alert("Failed to create listing.");
+      console.error("Error posting listings:", error);
+      const errorMessage = error.response?.data?.detail 
+        || error.message 
+        || "Failed to create listings";
+      alert(errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -122,7 +141,7 @@ export function ListingManager() {
       // dataResponse = response.data
       setResponseData(response.data);
       console.log(setResponseData)
-      console.log(responseData.data[0])
+      // console.log(responseData?.data[0])
 
 
       } catch (error) {
