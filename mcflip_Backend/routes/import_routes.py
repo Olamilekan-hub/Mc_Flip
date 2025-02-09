@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 import aiohttp
 import asyncio
@@ -15,37 +15,36 @@ router = APIRouter()
 
 # Gameflip API credentials and base URL
 BASE_URL = os.getenv("BASE_URL")
-API_KEY = os.getenv("API_KEY")
-API_SECRET = os.getenv("API_SECRET")
+# API_KEY = os.getenv("API_KEY")
+# API_SECRET = os.getenv("API_SECRET")
 
 # Define a Pydantic model to validate incoming request data
 class URLList(BaseModel):
     urls: list[str]
 
 # Function to generate authentication headers for API requests
-def get_auth_headers(content_type="application/json"):
+def get_auth_headers(api_key: str, api_secret: str, content_type="application/json"):
     try:
-        base64.b32decode(API_SECRET)  # Validate API_SECRET format
-        secret = API_SECRET
+        base64.b32decode(api_secret)  # Validate API_SECRET format
     except:
-        secret = base64.b32encode(API_SECRET.encode()).decode()
+        api_secret = base64.b32encode(api_secret.encode()).decode()
 
-    totp = pyotp.TOTP(secret)  # Generate one-time password (OTP)
+    totp = pyotp.TOTP(api_secret)  # Generate one-time password (OTP)
     otp = totp.now()
 
     headers = {
-        "Authorization": f"GFAPI {API_KEY}:{otp}",
+        "Authorization": f"GFAPI {api_key}:{otp}",
         "Content-Type": content_type
     }
     return headers
 
 # Function to make API requests with retry logic
-async def api_request(session, method, endpoint, data=None, params=None, retries=3):
+async def api_request(session, method, endpoint, api_key, api_secret, data=None, params=None, retries=3):
     url = BASE_URL + endpoint
     content_type = "application/json-patch+json" if method.upper() == 'PATCH' else "application/json"
 
     for attempt in range(retries):
-        headers = get_auth_headers(content_type)
+        headers = get_auth_headers(api_key, api_secret, content_type)
         try:
             async with getattr(session, method.lower())(url, headers=headers, json=data, params=params) as response:
                 response_data = await response.json()
@@ -63,6 +62,7 @@ async def api_request(session, method, endpoint, data=None, params=None, retries
             await asyncio.sleep(1)
     return None
 
+
 # Function to download an image from a URL and save it locally
 async def download_image(session, url, filename):
     try:
@@ -79,12 +79,12 @@ async def download_image(session, url, filename):
         return False
 
 # Function to process a listing URL and extract relevant information
-async def process_url(session, url, batch_dir):
+async def process_url(session, url, batch_dir, api_key, api_secret):
     try:
         listing_id = extract_listing_id(url)
         print(f"\nProcessing listing ID: {listing_id}")
 
-        listing_info = await get_listing(session, listing_id)
+        listing_info = await get_listing(session, api_key, api_secret, listing_id)
         if listing_info:
             print(f"Title: {listing_info.get('name', 'N/A')}")
             print(f"Price: ${listing_info.get('price', 'N/A')}")
@@ -113,7 +113,14 @@ async def process_url(session, url, batch_dir):
 
 # API endpoint to import multiple listings from provided URLs
 @router.post("/import-listings")
-async def import_listings(data: URLList):
+async def import_listings(request: Request, data: URLList):
+    body = await request.json()
+    api_key = body.get("api_key")
+    api_secret = body.get("api_secret")
+
+    if not api_key or not api_secret:
+        raise HTTPException(status_code=400, detail="API Key and Secret required")
+
     urls = data.urls
     if not urls:
         raise HTTPException(status_code=400, detail="No URLs provided")
@@ -125,16 +132,16 @@ async def import_listings(data: URLList):
 
         listings = []
         for url in urls:
-            listing_data = await process_url(session, url, batch_dir)
+            listing_data = await process_url(session, url, batch_dir, api_key, api_secret)
             if listing_data:
                 listings.append(listing_data)
 
-    # Save listing data as a JSON file
     json_filename = os.path.join(batch_dir, 'listings.json')
     with open(json_filename, 'w', encoding='utf-8') as f:
         json.dump(listings, f, indent=2, ensure_ascii=False)
 
     return {"message": "Import completed", "count": len(listings), "data": listings, "json_file": json_filename}
+
 
 # Function to extract listing ID from a given URL using regex patterns
 def extract_listing_id(url):
@@ -150,52 +157,9 @@ def extract_listing_id(url):
     raise ValueError(f"Could not extract listing ID from the URL: {url}")
 
 # Function to retrieve listing details from the API using listing ID
-async def get_listing(session, listing_id):
+async def get_listing(session, api_key, api_secret, listing_id):
     endpoint = f'/listing/{listing_id}'
-    data = await api_request(session, 'GET', endpoint)
+    data = await api_request(session, 'GET', endpoint, api_key, api_secret )
     if data and 'data' in data:
         return data['data']
     return None
-
-
-# from fastapi import APIRouter, HTTPException
-# from pydantic import BaseModel
-# import aiohttp
-# import asyncio
-# import os
-# import json
-# import logging
-# from datetime import datetime
-# from utils.auth import get_auth_headers, api_request
-# from utils.file_handler import save_listings
-
-# router = APIRouter()
-# BASE_URL = os.getenv("BASE_URL")
-
-# class URLList(BaseModel):
-#     urls: list[str]
-
-# # Function to process each listing URL
-# async def process_url(session, url):
-#     listing_id = url.split("/")[-1]  # Extract listing ID from URL
-#     endpoint = f'/listing/{listing_id}'
-    
-#     response = await api_request(session, 'GET', endpoint)
-#     if response and 'data' in response:
-#         listing = response['data']
-#         listing["image_urls"] = [img["view_url"] for img in listing.get("photo", {}).values()]
-#         return listing
-#     return None
-
-# # API endpoint to import multiple listings
-# @router.post("/import-listings")
-# async def import_listings(data: URLList):
-#     if not data.urls:
-#         raise HTTPException(status_code=400, detail="No URLs provided")
-
-#     async with aiohttp.ClientSession() as session:
-#         listings = await asyncio.gather(*(process_url(session, url) for url in data.urls))
-#         listings = [listing for listing in listings if listing]
-
-#     save_listings(listings)  # Save to listings.json
-#     return {"message": "Listings imported successfully", "count": len(listings)}

@@ -42,6 +42,8 @@ export function ListingManager() {
   const [selectAll, setSelectAll] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isNumListingModalOpen, setIsNumListingModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteOption, setDeleteOption] = useState<string>("");
   const [daysToDelete, setDaysToDelete] = useState<number>(30);
@@ -50,6 +52,14 @@ export function ListingManager() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [urls, setUrls] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [loadingNumListing, setLoadingNumListing] = useState(false);
+  const [numListing, setNumListing] = useState(null);
+  const [apiKey, setApiKey] = useState("");
+  const [apiSecret, setApiSecret] = useState("");
+  const [fetchedList, setFetchedList] = useState([]);
   interface ResponseData {
     data?: { id: string; name: string; image_urls: string[]; price?: number }[];
   }
@@ -66,9 +76,26 @@ export function ListingManager() {
         console.error("Error fetching listings:", error);
       });
     }
-  }, [status, session]);
 
-  const fetchListings = async (userId: string) => {
+const fetchKeys = async () => {
+  const docRef = doc(db, "users", userID);
+  const docSnap = await getDoc(docRef);
+
+  if (docSnap.exists()) {
+    const data = docSnap.data();
+    setApiKey(typeof data.apiKey === "string" ? data.apiKey : "");
+    setApiSecret(typeof data.apiSecret === "string" ? data.apiSecret : "");
+  }
+};
+
+if (status === "authenticated" && userID) {
+  fetchKeys().catch((error) => {
+    console.error("Error fetching API keys:", error);
+  });
+}}, [status, session, userID]);
+
+
+const fetchListings = async (userId: string) => {
     const userCollection = collection(db, "users", userId, "importedListings");
   
     const querySnapshot = await getDocs(userCollection);
@@ -77,7 +104,8 @@ export function ListingManager() {
     // Ensure savedListings is an array of items, not an array of objects containing listings arrays
     savedListings = savedListings.flatMap((entry) => entry.listings || []);
   
-    setResponseData({ data: savedListings });
+     setFetchedList(savedListings);
+     setResponseData({ data: savedListings });
     console.log("Fetched listings from Firestore:", savedListings);
   }; 
 
@@ -113,113 +141,280 @@ export function ListingManager() {
   };
 
   const dataResponse = responseData?.data;
+  console.log(dataResponse)
+
+  interface Listing {
+    id: string;
+    kind: string;
+    description: string;
+    owner: string;
+    category: string;
+    name: string;
+    price: number;
+    accept_currency: string;
+    upc: string;
+    cognitoidp_client: string;
+    tags: string[];
+    digital: boolean;
+    digital_deliverable: string;
+    photo: string;
+    image_urls: string[];
+    // status: string;
+    shipping_fee: number;
+    shipping_paid_by: string;
+    shipping_within_days: number;
+    expire_in_days: number;
+    visibility: string;
+    cover_photo: string;
+    additional_images: [],
+  }
+  
+  const formattedData: { listings: Listing[] } = {
+    listings: (fetchedList ?? []).map((listing: Listing) => ({
+      id: listing.id,
+      kind: listing.kind,
+      description: listing.description,
+      owner: listing.owner,
+      category: listing.category,
+      name: listing.name,
+      price: listing.price,
+      accept_currency: listing.accept_currency,
+      upc: listing.upc,
+      cognitoidp_client: listing.cognitoidp_client,
+      tags: listing.tags,
+      digital: listing.digital,
+      digital_deliverable: listing.digital_deliverable,
+      photo: listing.photo,
+      // status: listing.status,
+      shipping_fee: listing.shipping_fee,
+      shipping_paid_by: listing.shipping_paid_by,
+      shipping_within_days: listing.shipping_within_days,
+      expire_in_days: listing.expire_in_days,
+      image_url: listing.photo[listing.cover_photo]?.view_url,
+      additional_images: Object.values(listing.photo)
+        .map(photo => photo.view_url)
+        .filter(url => typeof url === "string" && url.trim() !== ""),
+      cover_photo: listing.cover_photo? listing.cover_photo : "",
+    })),
+  };
+  console.log(formattedData)
+
+  // const mockDataResponse = [
+  //   {
+  //     owner: "user123",
+  //     name: "nEW CS2 - Dragon Lore AWP",
+  //     description: "Factory New Dragon Lore AWP Skin with 0.001 Float",
+  //     upc: "CS2-DLORE-001",
+  //     price: 150000, // $1,500.00
+  //     accept_currency: "USD",
+  //     shipping_within_days: 1,
+  //     expire_in_days: 7,
+  //     cognitoidp_client: "game_client_1",
+  //     tags: ["Type:AWP", "Wear:Factory New", "Game:CS2"],
+  //     digital_deliverable: "transfer",
+  //     image_url: "https://dummyimage.com/600x400/ff9900/ffffff&text=Dragon+Lore+AWP",
+  //     additional_images: [
+  //       "https://dummyimage.com/600x400/006699/ffffff&text=Dragon+Lore+Side",
+  //       "https://dummyimage.com/600x400/990066/ffffff&text=Dragon+Lore+Back"
+  //     ]
+  //   },
+  //   {
+  //     owner: "user456",
+  //     name: "nEW Dota 2 Arcana Bundle",
+  //     description: "Exclusive Arcana Bundle with Rare Immortals",
+  //     upc: "DOTA2-ARC-002",
+  //     price: 9999, // $99.99
+  //     accept_currency: "USD",
+  //     shipping_within_days: 1,
+  //     expire_in_days: 7,
+  //     cognitoidp_client: "game_client_2",
+  //     tags: ["Type:Bundle", "Rarity:Arcana", "Game:Dota2"],
+  //     digital_deliverable: "transfer",
+  //     image_url: "https://dummyimage.com/600x400/663399/ffffff&text=Dota+2+Arcana"
+  //   },
+  //   {
+  //     owner: "user789",
+  //     name: "nEW CSGO - Butterfly Knife",
+  //     description: "Factory New Butterfly Knife | Fade (100% Fade)",
+  //     upc: "CSGO-BFLY-003",
+  //     price: 89999, // $899.99
+  //     accept_currency: "USD",
+  //     shipping_within_days: 1,
+  //     expire_in_days: 7,
+  //     cognitoidp_client: "game_client_1",
+  //     tags: ["Type:Knife", "Wear:Factory New", "Game:CSGO", "Pattern:Fade"],
+  //     digital_deliverable: "transfer",
+  //     image_url: "https://dummyimage.com/600x400/cc3300/ffffff&text=Butterfly+Knife+Fade",
+  //     additional_images: [
+  //       "https://dummyimage.com/600x400/cc6600/ffffff&text=Knife+Animation",
+  //       "https://dummyimage.com/600x400/cc9900/ffffff&text=Pattern+Index"
+  //     ]
+  //   }
+  // ];
+
+
+  // const handlePostListing = async () => {
+  //   setIsProcessing(true);
+
+  //   try {
+  //     // Validate if there's data to process
+  //     if (!dataResponse || dataResponse.length === 0) {
+  //       console.log("No listing data available for posting.");
+  //       return;
+  //     }
+
+  //     // Format the data according to the API's expected structure
+  //     const formattedData = {
+  //       listings: dataResponse.map((listing) => ({
+  //         id: listing.id,
+  //         kind: listing.kind,
+  //         description: listing.description,
+  //         owner: listing.owner,
+  //         category: listing.category,
+  //         name: listing.name,
+  //         price: listing.price,
+  //         accept_currency: listing.accept_currency,
+  //         upc: listing.upc,
+  //         cognitoidp_client: listing.cognitoidp_client,
+  //         tags: listing.tags,
+  //         digital: listing.digital,
+  //         digital_deliverable: listing.digital_deliverable,
+  //         photo: listing.photo,
+  //         status: listing.status,
+  //         shipping_fee: listing.shipping_fee,
+  //         shipping_paid_by: listing.shipping_paid_by,
+  //         shipping_within_days: listing.shipping_within_days,
+  //         expire_in_days: listing.expire_in_days,
+  //         visibility: listing.visibility,
+  //       })),
+  //     };
+
+  //     console.log("Posting listings:", formattedData);
+
+  //     // Make the API call with the properly formatted data
+  //     const response = await axios.post(
+  //       "http://localhost:8000/api/post-listings",
+  //       formattedData,
+  //     );
+
+  //     if (response.data?.message) {
+  //       console.log("Listings posted successfully:", response.data);
+  //       alert(response.data.message);
+  //     } else {
+  //       throw new Error("Invalid response from server");
+  //     }
+  //   } catch (error) {
+  //     console.error("Error posting listings:", error);
+  //     const errorMessage =
+  //       error.response?.data?.detail ||
+  //       error.message ||
+  //       "Failed to create listings";
+  //     alert(errorMessage);
+  //   } finally {
+  //     setIsProcessing(false);
+  //   }
+  // };
 
   const handlePostListing = async () => {
     setIsProcessing(true);
+    const results = [];
 
     try {
-      // Validate if there's data to process
-      if (!dataResponse || dataResponse.length === 0) {
-        console.log("No listing data available for posting.");
-        return;
-      }
+        const dataResponse = formattedData.listings;
 
-      // Format the data according to the API's expected structure
-      const formattedData = {
-        listings: dataResponse.map((listing) => ({
-          id: listing.id,
-          kind: listing.kind,
-          description: listing.description,
-          owner: listing.owner,
-          category: listing.category,
-          name: listing.name,
-          price: listing.price,
-          accept_currency: listing.accept_currency,
-          upc: listing.upc,
-          cognitoidp_client: listing.cognitoidp_client,
-          tags: listing.tags,
-          digital: listing.digital,
-          digital_deliverable: listing.digital_deliverable,
-          photo: listing.photo,
-          status: listing.status,
-          shipping_fee: listing.shipping_fee,
-          shipping_paid_by: listing.shipping_paid_by,
-          shipping_within_days: listing.shipping_within_days,
-          expire_in_days: listing.expire_in_days,
-          visibility: listing.visibility,
-        })),
-      };
+        if (!dataResponse || dataResponse.length === 0) {
+            console.log("No listing data available for posting.");
+            return;
+        }
 
-      console.log("Posting listings:", formattedData);
+        for (const listing of dataResponse) {
+            const listingData = {
+                kind: "item",
+                owner: listing.owner,
+                status: "draft",
+                name: listing.name,
+                description: listing.description,
+                category: "DIGITAL_INGAME",
+                platform: "unknown",
+                upc: listing.upc,
+                price: listing.price,
+                accept_currency: listing.accept_currency,
+                shipping_within_days: listing.shipping_within_days || 3,
+                expire_in_days: listing.expire_in_days || 7,
+                shipping_fee: 0,
+                shipping_paid_by: "seller",
+                shipping_predefined_package: "None",
+                cognitoidp_client: listing.cognitoidp_client,
+                tags: listing.tags || ["id:bundle", "type:custom"],
+                digital: true,
+                digital_region: "none",
+                digital_deliverable: listing.digital_deliverable || "transfer",
+                visibility: "public",
+                image_url: listing.image_url,
+                additional_images: listing.additional_images,
+            };
 
-      // Make the API call with the properly formatted data
-      const response = await axios.post(
-        "http://localhost:8000/api/post-listings",
-        formattedData,
-      );
+            try {
+                const response: { data: { status: string; listing_id?: string } } = await axios.post(
+                    "http://localhost:8000/api/post-listing-with-image",
+                    listingData,
+                    { headers: { "Content-Type": "application/json" } }
+                );
 
-      if (response.data?.message) {
-        console.log("Listings posted successfully:", response.data);
-        alert(response.data.message);
-      } else {
-        throw new Error("Invalid response from server");
-      }
+                if (response.data.status === "SUCCESS") {
+                    const listingId = response.data.listing_id;
+                    results.push({
+                        listing: listing.name,
+                        status: "Success",
+                        data: response.data,
+                        listingId,
+                    });
+                }
+            } catch (error) {
+                console.error(`Error posting listing ${listing.name}:`, error);
+
+                // Check for listing limit error
+                if (
+                    error.response?.status === 422 &&
+                    error.response?.data?.detail?.includes("listing limit")
+                ) {
+                    alert(
+                        "Listing limit reached. Please remove some listings before adding more."
+                    );
+                    break; // Stop processing more listings
+                }
+
+                results.push({
+                    listing: listing.name,
+                    status: "Failed",
+                    error: error.response?.data?.detail || error.message,
+                });
+            }
+        }
+
+        const successfulListings = results.filter(
+            (r) => r.status === "Success"
+        ).length;
+
+        if (successfulListings > 0) {
+            alert(
+                `Successfully created ${successfulListings} out of ${results.length} listings`
+            );
+        } else {
+            throw new Error("Failed to create any listings");
+        }
     } catch (error) {
-      console.error("Error posting listings:", error);
-      const errorMessage =
-        error.response?.data?.detail ||
-        error.message ||
-        "Failed to create listings";
-      alert(errorMessage);
+        console.error("Error posting listings:", error);
+        const errorMessage =
+            error.response?.data?.detail ||
+            error.message ||
+            "Failed to create listings";
+        alert(errorMessage);
     } finally {
-      setIsProcessing(false);
+        setIsProcessing(false);
     }
-  };
+};
 
-  // const handleImport = async () => {
-  //   setIsImporting(true);
-  //   try {
-  //     const urls = importUrls.split("\n").filter((url) => url.trim() !== "");
-  //     console.log(`Importing ${urls.length} URLs:`, urls);
-  
-  //     const response = await axios.post(
-  //       "http://localhost:8000/api/import-listings",
-  //       { urls }
-  //     );
-  
-  //     console.log("Import successful:", response.data);
-  //     const newListings = response.data.data;
-  
-  //     // Save imported data to Firestore
-  //     const userId = userID; // Replace with actual user ID from authentication
-  //     const userDocRef = doc(db, "users", userId, "importedListings", "allListings");
-  
-  //     // Fetch the existing document
-  //     const docSnap = await getDoc(userDocRef);
-  
-  //     if (docSnap.exists()) {
-  //       // Merge new listings with existing ones
-  //       const existingListings = docSnap.data().listings || [];
-  //       const mergedListings = [...existingListings, ...newListings];
-  
-  //       // Update Firestore with merged listings
-  //       await setDoc(userDocRef, { listings: mergedListings }, { merge: true });
-  //     } else {
-  //       // If document doesn't exist, create a new one
-  //       await setDoc(userDocRef, { listings: newListings });
-  //     }
-  
-  //     console.log("Data saved to Firestore as a single document.");
-  //     fetchListings(userId); // Refresh listings
-  
-  //   } catch (error) {
-  //     console.error("Error importing URLs:", error);
-  //   } finally {
-  //     setIsImporting(false);
-  //     setIsImportModalOpen(false);
-  //     setImportUrls("");
-  //   }
-  // };
 
   const handleImport = async () => {
   setIsImporting(true);
@@ -227,10 +422,11 @@ export function ListingManager() {
     const urls = importUrls.split("\n").filter((url) => url.trim() !== "");
     console.log(`Importing ${urls.length} URLs:`, urls);
 
-    const response = await axios.post(
-      "http://localhost:8000/api/import-listings",
-      { urls }
-    );
+    const response = await axios.post("http://localhost:8000/api/import-listings", {
+      urls,
+      api_key: apiKey as string,
+      api_secret: apiSecret as string,
+    });
 
     // Ensure response data exists
     if (!response.data || !response.data.data) {
@@ -274,9 +470,6 @@ export function ListingManager() {
     setImportUrls("");
   }
 };
-
-    
-
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -333,6 +526,88 @@ export function ListingManager() {
     console.log("Stopped posting listings");
   };
 
+  const fetchBulkList = async () => {
+    setLoading(true);
+    setError("");
+    
+    try {
+      const response = await axios.get("http://localhost:8000/api/gameflip/listings", {
+        headers: {
+          'apiKey': apiKey,
+          'apiSecret': apiSecret,
+        },
+      });
+      setUrls((response.data as { urls: string[] }).urls);
+    } catch (err) {
+      setError("Failed to fetch listings. Please try again.");
+    }
+
+    setLoading(false);
+  };
+
+  const handleCheckListings = async () => {
+    setLoadingNumListing(true);
+    setNumListing(null);
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/count-listings?apiKey=${encodeURIComponent(apiKey)}&apiSecret=${encodeURIComponent(apiSecret)}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch listings");
+      }
+
+      const result = await response.json();
+      setNumListing(result);      
+      setNumListing(result);
+    } catch (error) {
+      console.error("Error:", error);
+    } finally {
+      setLoadingNumListing(false);
+    }
+  };
+
+  const handleDeleteListings = async () => {
+  setIsDeleting(true);
+  try {
+    const response = await axios.post(
+      "http://localhost:8000/api/delete-old-listings",
+      { delete_threshold: 1,      
+        api_key: apiKey,
+        api_secret: apiSecret,
+       }, // Pass threshold in body
+      {
+        headers: {
+          "api_key": apiKey,
+          "api_secret": apiSecret,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.data || response.data.status !== "success") {
+      throw new Error("Invalid API response format");
+    }
+
+    console.log("Listings deleted successfully:", response.data);
+
+    // fetchListings(userID); // Refresh the listings after deletion
+  } catch (error) {
+    console.error("Error deleting listings:", error);
+  } finally {
+    setIsDeleting(false);
+      setIsDeleteModalOpen(false);
+      setDeleteOption("");
+  }
+};
+
+
+
+
   return (
     <div className="dark min-h-screen bg-background p-4 text-foreground">
       <h2 className="mb-4 text-xl font-bold text-white">Create New Listing</h2>
@@ -383,11 +658,18 @@ export function ListingManager() {
                 <Import className="mr-2 h-4 w-4" />
                 Import URL
               </Button>
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" 
+              className="w-full"
+                onClick={() => setIsBulkModalOpen(true)}
+              >
                 <Link2 className="mr-2 h-4 w-4" />
                 Get Bulk Links
               </Button>
-              <Button variant="outline" className="w-full">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {setIsNumListingModalOpen(true); handleCheckListings()}}
+              >
                 <ClipboardList className="mr-2 h-4 w-4" />
                 Check Listings
               </Button>
@@ -509,6 +791,63 @@ export function ListingManager() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isBulkModalOpen} onOpenChange={setIsBulkModalOpen}>
+        <DialogContent className="">
+          <DialogHeader>
+            <DialogTitle>Bulk URLs</DialogTitle>
+          </DialogHeader>
+          {error && <p className="text-red-500 mt-2">{error}</p>}
+          <div className="max-h-1/2 overflow-auto ">
+                {urls.length > 0 && (
+              <ul className="mt-4">
+                {urls.map((url, index) => (
+                  <li key={index} className="mt-1 text-sm">
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="underline text-xs">
+                      {url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => setIsBulkModalOpen(false)}
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+            onClick={fetchBulkList}
+            disabled={loading}
+              className={loading ? "bg-primary/70" : ""}
+            >
+              {loading ? "Loading..." : "Get Bulk List"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isNumListingModalOpen} onOpenChange={setIsNumListingModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cheack Listings</DialogTitle>
+          </DialogHeader>
+          <div  className="flex items-center justify-center">
+            <p className="text-md">Total Listings Available:  <span> 
+            {loadingNumListing ? "Checking..." : (numListing ? numListing.total_listings : 0)}</span></p>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => setIsNumListingModalOpen(false)}
+              variant="outline"
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -550,7 +889,7 @@ export function ListingManager() {
               Cancel
             </Button>
             <Button
-              onClick={handleDelete}
+              onClick={handleDeleteListings}
               variant="destructive"
               disabled={!deleteOption || isDeleting}
               className={isDeleting ? "bg-destructive/70" : ""}
