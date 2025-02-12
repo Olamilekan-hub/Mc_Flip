@@ -19,6 +19,8 @@ export function SettingsPage() {
 
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
+  const [timeBetweenListings, setTimeBetweenListings] = useState("");
+  const [deleteListingsHours, setDeleteListingsHours] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Fetch API Keys from Firestore
@@ -28,14 +30,17 @@ export function SettingsPage() {
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
+        console.log(data)
         setApiKey(typeof data.apiKey === "string" ? data.apiKey : "");
         setApiSecret(typeof data.apiSecret === "string" ? data.apiSecret : "");
+        setTimeBetweenListings(typeof data.timeBetweenListings === "string" ? data.timeBetweenListings : "" );
+        setDeleteListingsHours(typeof data.deleteListingsHours === "string" ? data.deleteListingsHours : "");
       }
     };
     
     if (status === "authenticated" && USER_ID) {
       fetchApiKeys().catch((error) => {
-        console.error("Error fetching API keys:", error);
+        console.error("Error fetching API keys and Timing:", error);
       });
 }}, [status, session, USER_ID]);
 
@@ -44,10 +49,10 @@ export function SettingsPage() {
     setLoading(true);
     try {
       const docRef = doc(db, "users", USER_ID);
-      await setDoc(docRef, { apiKey, apiSecret }, { merge: true });
-      alert("API Keys updated successfully!");
+      await setDoc(docRef, { apiKey, apiSecret, deleteListingsHours, timeBetweenListings }, { merge: true });
+      alert("API Keys and Timing updated successfully!");
     } catch (error) {
-      console.error("Error saving API keys:", error);
+      console.error("Error saving API keys and Timing:", error);
       alert("Failed to save API keys.");
     } finally {
       setLoading(false);
@@ -72,7 +77,9 @@ export function SettingsPage() {
                     <Input
                       id="listingTime"
                       type="number"
-                      defaultValue="95"
+                      value={timeBetweenListings}
+                      onChange={e => setTimeBetweenListings(e.target.value)}
+                      // defaultValue="95"
                       className="bg-background border-primary/20"
                     />
                   </div>
@@ -83,7 +90,9 @@ export function SettingsPage() {
                     <Input
                       id="deleteTime"
                       type="number"
-                      defaultValue="64.00"
+                      value={deleteListingsHours}
+                      onChange={e => setDeleteListingsHours(e.target.value)}
+                      // defaultValue="64.00"
                       className="bg-background border-primary/20"
                     />
                   </div>

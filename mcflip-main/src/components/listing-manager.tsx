@@ -18,6 +18,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "~/components/ui/dialog";
+import {
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalTitle,
+  ModalFooter,
+} from "~/components/ui/modal";
 import { Textarea } from "~/components/ui/textarea";
 import {
   Package,
@@ -45,6 +52,7 @@ export function ListingManager() {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isNumListingModalOpen, setIsNumListingModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [deleteOption, setDeleteOption] = useState<string>("");
   const [daysToDelete, setDaysToDelete] = useState<number>(30);
   const [importUrls, setImportUrls] = useState("");
@@ -59,12 +67,18 @@ export function ListingManager() {
   const [numListing, setNumListing] = useState(null);
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
+  const [taskID, setTaskID] = useState("");
   const [fetchedList, setFetchedList] = useState([]);
+  const [responseData, setResponseData] = useState<ResponseData | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isPostingCustom, setIsPostingCustom] = useState(false);
+
+
   interface ResponseData {
     data?: { id: string; name: string; image_urls: string[]; price?: number }[];
   }
 
-  const [responseData, setResponseData] = useState<ResponseData | null>(null);
 
   const { data: session, status } = useSession();
   const userID = session?.user?.id;
@@ -92,7 +106,7 @@ if (status === "authenticated" && userID) {
   fetchKeys().catch((error) => {
     console.error("Error fetching API keys:", error);
   });
-}}, [status, session, userID]);
+}}, [status]);
 
 
 const fetchListings = async (userId: string) => {
@@ -141,7 +155,7 @@ const fetchListings = async (userId: string) => {
   };
 
   const dataResponse = responseData?.data;
-  console.log(dataResponse)
+  console.log("AA",dataResponse)
 
   interface Listing {
     id: string;
@@ -158,15 +172,14 @@ const fetchListings = async (userId: string) => {
     digital: boolean;
     digital_deliverable: string;
     photo: string;
-    image_urls: string[];
-    // status: string;
+    image_urls: string;
     shipping_fee: number;
     shipping_paid_by: string;
     shipping_within_days: number;
     expire_in_days: number;
     visibility: string;
     cover_photo: string;
-    additional_images: [],
+    additional_images: string[],
   }
   
   const formattedData: { listings: Listing[] } = {
@@ -185,236 +198,176 @@ const fetchListings = async (userId: string) => {
       digital: listing.digital,
       digital_deliverable: listing.digital_deliverable,
       photo: listing.photo,
-      // status: listing.status,
       shipping_fee: listing.shipping_fee,
       shipping_paid_by: listing.shipping_paid_by,
       shipping_within_days: listing.shipping_within_days,
       expire_in_days: listing.expire_in_days,
-      image_url: listing.photo[listing.cover_photo]?.view_url,
+      visibility: listing.visibility, // Added missing property
+      image_urls: typeof listing.photo === 'object' && typeof listing.cover_photo === 'string' && listing.photo[listing.cover_photo] && 'view_url' in listing.photo[listing.cover_photo] ? (listing.photo[listing.cover_photo] as { view_url: string }).view_url : '',
       additional_images: Object.values(listing.photo)
-        .map(photo => photo.view_url)
+        .map((photo: any) => (typeof photo === 'object' && 'view_url' in photo ? photo.view_url : ''))
         .filter(url => typeof url === "string" && url.trim() !== ""),
       cover_photo: listing.cover_photo? listing.cover_photo : "",
     })),
   };
-  console.log(formattedData)
-
-  // const mockDataResponse = [
-  //   {
-  //     owner: "user123",
-  //     name: "nEW CS2 - Dragon Lore AWP",
-  //     description: "Factory New Dragon Lore AWP Skin with 0.001 Float",
-  //     upc: "CS2-DLORE-001",
-  //     price: 150000, // $1,500.00
-  //     accept_currency: "USD",
-  //     shipping_within_days: 1,
-  //     expire_in_days: 7,
-  //     cognitoidp_client: "game_client_1",
-  //     tags: ["Type:AWP", "Wear:Factory New", "Game:CS2"],
-  //     digital_deliverable: "transfer",
-  //     image_url: "https://dummyimage.com/600x400/ff9900/ffffff&text=Dragon+Lore+AWP",
-  //     additional_images: [
-  //       "https://dummyimage.com/600x400/006699/ffffff&text=Dragon+Lore+Side",
-  //       "https://dummyimage.com/600x400/990066/ffffff&text=Dragon+Lore+Back"
-  //     ]
-  //   },
-  //   {
-  //     owner: "user456",
-  //     name: "nEW Dota 2 Arcana Bundle",
-  //     description: "Exclusive Arcana Bundle with Rare Immortals",
-  //     upc: "DOTA2-ARC-002",
-  //     price: 9999, // $99.99
-  //     accept_currency: "USD",
-  //     shipping_within_days: 1,
-  //     expire_in_days: 7,
-  //     cognitoidp_client: "game_client_2",
-  //     tags: ["Type:Bundle", "Rarity:Arcana", "Game:Dota2"],
-  //     digital_deliverable: "transfer",
-  //     image_url: "https://dummyimage.com/600x400/663399/ffffff&text=Dota+2+Arcana"
-  //   },
-  //   {
-  //     owner: "user789",
-  //     name: "nEW CSGO - Butterfly Knife",
-  //     description: "Factory New Butterfly Knife | Fade (100% Fade)",
-  //     upc: "CSGO-BFLY-003",
-  //     price: 89999, // $899.99
-  //     accept_currency: "USD",
-  //     shipping_within_days: 1,
-  //     expire_in_days: 7,
-  //     cognitoidp_client: "game_client_1",
-  //     tags: ["Type:Knife", "Wear:Factory New", "Game:CSGO", "Pattern:Fade"],
-  //     digital_deliverable: "transfer",
-  //     image_url: "https://dummyimage.com/600x400/cc3300/ffffff&text=Butterfly+Knife+Fade",
-  //     additional_images: [
-  //       "https://dummyimage.com/600x400/cc6600/ffffff&text=Knife+Animation",
-  //       "https://dummyimage.com/600x400/cc9900/ffffff&text=Pattern+Index"
-  //     ]
-  //   }
-  // ];
-
-
-  // const handlePostListing = async () => {
-  //   setIsProcessing(true);
-
-  //   try {
-  //     // Validate if there's data to process
-  //     if (!dataResponse || dataResponse.length === 0) {
-  //       console.log("No listing data available for posting.");
-  //       return;
-  //     }
-
-  //     // Format the data according to the API's expected structure
-  //     const formattedData = {
-  //       listings: dataResponse.map((listing) => ({
-  //         id: listing.id,
-  //         kind: listing.kind,
-  //         description: listing.description,
-  //         owner: listing.owner,
-  //         category: listing.category,
-  //         name: listing.name,
-  //         price: listing.price,
-  //         accept_currency: listing.accept_currency,
-  //         upc: listing.upc,
-  //         cognitoidp_client: listing.cognitoidp_client,
-  //         tags: listing.tags,
-  //         digital: listing.digital,
-  //         digital_deliverable: listing.digital_deliverable,
-  //         photo: listing.photo,
-  //         status: listing.status,
-  //         shipping_fee: listing.shipping_fee,
-  //         shipping_paid_by: listing.shipping_paid_by,
-  //         shipping_within_days: listing.shipping_within_days,
-  //         expire_in_days: listing.expire_in_days,
-  //         visibility: listing.visibility,
-  //       })),
-  //     };
-
-  //     console.log("Posting listings:", formattedData);
-
-  //     // Make the API call with the properly formatted data
-  //     const response = await axios.post(
-  //       "http://localhost:8000/api/post-listings",
-  //       formattedData,
-  //     );
-
-  //     if (response.data?.message) {
-  //       console.log("Listings posted successfully:", response.data);
-  //       alert(response.data.message);
-  //     } else {
-  //       throw new Error("Invalid response from server");
-  //     }
-  //   } catch (error) {
-  //     console.error("Error posting listings:", error);
-  //     const errorMessage =
-  //       error.response?.data?.detail ||
-  //       error.message ||
-  //       "Failed to create listings";
-  //     alert(errorMessage);
-  //   } finally {
-  //     setIsProcessing(false);
-  //   }
-  // };
+  console.log("fd",formattedData)
 
   const handlePostListing = async () => {
     setIsProcessing(true);
     const results = [];
-
+  
     try {
-        const dataResponse = formattedData.listings;
-
-        if (!dataResponse || dataResponse.length === 0) {
-            console.log("No listing data available for posting.");
-            return;
-        }
-
-        for (const listing of dataResponse) {
-            const listingData = {
-                kind: "item",
-                owner: listing.owner,
-                status: "draft",
-                name: listing.name,
-                description: listing.description,
-                category: "DIGITAL_INGAME",
-                platform: "unknown",
-                upc: listing.upc,
-                price: listing.price,
-                accept_currency: listing.accept_currency,
-                shipping_within_days: listing.shipping_within_days || 3,
-                expire_in_days: listing.expire_in_days || 7,
-                shipping_fee: 0,
-                shipping_paid_by: "seller",
-                shipping_predefined_package: "None",
-                cognitoidp_client: listing.cognitoidp_client,
-                tags: listing.tags || ["id:bundle", "type:custom"],
-                digital: true,
-                digital_region: "none",
-                digital_deliverable: listing.digital_deliverable || "transfer",
-                visibility: "public",
-                image_url: listing.image_url,
-                additional_images: listing.additional_images,
-            };
-
+      const listingsToPost = formattedData.listings;
+  
+      if (!listingsToPost || listingsToPost.length === 0) {
+        console.log("No listing data available for posting.");
+        return;
+      }
+  
+      for (const listing of listingsToPost) {
+        const listingData = {
+          kind: "item",
+          owner: listing.owner,
+          status: "draft",
+          name: listing.name,
+          description: listing.description,
+          category: "DIGITAL_INGAME",
+          platform: "unknown",
+          upc: listing.upc,
+          price: listing.price,
+          accept_currency: listing.accept_currency,
+          shipping_within_days: listing.shipping_within_days || 3,
+          expire_in_days: listing.expire_in_days || 7,
+          shipping_fee: 0,
+          shipping_paid_by: "seller",
+          shipping_predefined_package: "None",
+          cognitoidp_client: listing.cognitoidp_client,
+          tags: listing.tags || ["id:bundle", "type:custom"],
+          digital: true,
+          digital_region: "none",
+          digital_deliverable: listing.digital_deliverable || "transfer",
+          visibility: "public",
+          image_url: listing.image_urls,
+          additional_images: listing.additional_images || []
+        };
+  
+        try {
+          // First, verify that the image URLs are accessible
+          const verifyImage = async (url) => {
             try {
-                const response: { data: { status: string; listing_id?: string } } = await axios.post(
-                    "http://localhost:8000/api/post-listing-with-image",
-                    listingData,
-                    { headers: { "Content-Type": "application/json" } }
-                );
-
-                if (response.data.status === "SUCCESS") {
-                    const listingId = response.data.listing_id;
-                    results.push({
-                        listing: listing.name,
-                        status: "Success",
-                        data: response.data,
-                        listingId,
-                    });
-                }
+              const response = await fetch(url);
+              return response.ok;
             } catch (error) {
-                console.error(`Error posting listing ${listing.name}:`, error);
-
-                // Check for listing limit error
-                if (
-                    error.response?.status === 422 &&
-                    error.response?.data?.detail?.includes("listing limit")
-                ) {
-                    alert(
-                        "Listing limit reached. Please remove some listings before adding more."
-                    );
-                    break; // Stop processing more listings
-                }
-
-                results.push({
-                    listing: listing.name,
-                    status: "Failed",
-                    error: error.response?.data?.detail || error.message,
-                });
+              console.error(`Failed to verify image URL: ${url}`);
+              return false;
             }
+          };
+  
+          // Verify main image
+          const mainImageValid = await verifyImage(listing.image_urls);
+          if (!mainImageValid) {
+            throw new Error(`Main image URL is not accessible: ${listing.image_urls}`);
+          }
+  
+          // Verify additional images
+          if (listing.additional_images) {
+            for (const imgUrl of listing.additional_images) {
+              const additionalImageValid = await verifyImage(imgUrl);
+              if (!additionalImageValid) {
+                throw new Error(`Additional image URL is not accessible: ${imgUrl}`);
+              }
+            }
+          }
+  
+          const response = await axios.post(
+            "http://localhost:8000/api/post-listing-with-image",
+            listingData,
+            { 
+              headers: { 
+                "Content-Type": "application/json"
+              } 
+            }
+          );
+  
+          if (response.data.status === "SUCCESS") {
+            console.log(`Successfully posted listing: ${listing.name}`);
+            setTaskID(response.data.task_id)
+            console.log("Task ID", response.data.task_id)
+            console.log('Response data:', response.data);
+            
+            results.push({
+              listing: listing.name,
+              status: "Success",
+              data: response.data,
+              listingId: response.data.listing_id,
+              imageUrls: response.data.image_urls
+            });
+          }
+        } catch (error) {
+          console.error(`Error posting listing ${listing.name}:`, error);
+  
+          if (
+            error.response?.status === 422 &&
+            error.response?.data?.detail?.includes("listing limit")
+          ) {
+            alert("Listing limit reached. Please remove some listings before adding more.");
+            break;
+          }
+  
+          results.push({
+            listing: listing.name,
+            status: "Failed",
+            error: error.response?.data?.detail || error.message
+          });
         }
-
-        const successfulListings = results.filter(
-            (r) => r.status === "Success"
-        ).length;
-
-        if (successfulListings > 0) {
-            alert(
-                `Successfully created ${successfulListings} out of ${results.length} listings`
-            );
-        } else {
-            throw new Error("Failed to create any listings");
-        }
+      }
+  
+      const successfulListings = results.filter(r => r.status === "Success").length;
+  
+      if (successfulListings > 0) {
+        alert(`Successfully created ${successfulListings} out of ${results.length} listings`);
+      } else {
+        throw new Error("Failed to create any listings");
+      }
+  
     } catch (error) {
-        console.error("Error posting listings:", error);
-        const errorMessage =
-            error.response?.data?.detail ||
-            error.message ||
-            "Failed to create listings";
-        alert(errorMessage);
+      console.error("Error posting listings:", error);
+      const errorMessage = error.response?.data?.detail || 
+                          error.message || 
+                          "Failed to create listings";
+      alert(errorMessage);
     } finally {
-        setIsProcessing(false);
+      // setIsProcessing(false);
     }
-};
-
+  };
+  
+  const handleStopPosting = async () => {
+    if (!taskID) {
+      alert("No active posting task found.");
+      return;
+    }
+  
+    try {
+      const response = await axios.post(
+        "http://localhost:8000/api/post-listing-with-image",
+        { stop: true, task_id: taskID },
+        { headers: { "Content-Type": "application/json" } }
+      );
+  
+      if (response.data.status === "SUCCESS") {
+        alert(`Stopped posting task ${taskID}`);
+        console.log("Task stopped:", response.data);
+      } else {
+        alert("Failed to stop posting.");
+      }
+    } catch (error) {
+      console.error("Error stopping posting:", error);
+      alert("Error stopping the listing process.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+  
 
   const handleImport = async () => {
   setIsImporting(true);
@@ -471,30 +424,6 @@ const fetchListings = async (userId: string) => {
   }
 };
 
-  const handleDelete = async () => {
-    setIsDeleting(true);
-    try {
-      switch (deleteOption) {
-        case "expired":
-          console.log("Deleting expired listings");
-          break;
-        case "older":
-          console.log(`Deleting listings older than ${daysToDelete} days`);
-          break;
-        case "all":
-          console.log("Deleting all listings");
-          break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    } catch (error) {
-      console.error("Error deleting listings:", error);
-    } finally {
-      setIsDeleting(false);
-      setIsDeleteModalOpen(false);
-      setDeleteOption("");
-    }
-  };
-
   const handlePostingToggle = async () => {
     setIsProcessing(true);
     try {
@@ -538,6 +467,7 @@ const fetchListings = async (userId: string) => {
         },
       });
       setUrls((response.data as { urls: string[] }).urls);
+      console.log(urls)
     } catch (err) {
       setError("Failed to fetch listings. Please try again.");
     }
@@ -576,7 +506,7 @@ const fetchListings = async (userId: string) => {
   try {
     const response = await axios.post(
       "http://localhost:8000/api/delete-old-listings",
-      { delete_threshold: 1,      
+      { delete_threshold: 180,      
         api_key: apiKey,
         api_secret: apiSecret,
        }, // Pass threshold in body
@@ -605,8 +535,208 @@ const fetchListings = async (userId: string) => {
   }
 };
 
+// Handle tag addition
+  const addTag = () => {
+    const tagInput = document.getElementById("custom-new-tag-input") as HTMLInputElement;
+    const newTag = tagInput.value.trim();
+    if (newTag && !tags.includes(newTag)) {
+      setTags([...tags, newTag]);
+      tagInput.value = "";
+    }
+  };
 
+  // Handle image preview
+  const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setPhotoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
+  const formattedCustomData: { listings: Listing[] } = {
+    listings: [],
+  };
+
+  const handleCustomListingSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsPostingCustom(true);
+
+    console.log("Submitting Custom Listing..."); 
+  
+    const formData = new FormData(event.currentTarget);
+  
+    const newListing: Listing = {
+      id: `custom-${Date.now()}`, // Unique ID for the custom listing
+      kind: formData.get("kind") as string,
+      description: formData.get("description") as string,
+      owner: "custom-owner", // You can set a default or retrieve it dynamically
+      category: formData.get("category") as string,
+      name: formData.get("name") as string,
+      price: parseFloat(formData.get("price") as string),
+      accept_currency: "USD", // Set a default or retrieve it dynamically
+      upc: "", // If not available, leave it empty
+      cognitoidp_client: "", // If not available, leave it empty
+      tags: tags, // Assuming 'tags' is a state variable holding tag values
+      digital: formData.get("category")?.toString().includes("DIGITAL") ?? false,
+      digital_deliverable: formData.get("category")?.toString().includes("DIGITAL") ? "true" : "false",
+      photo: photoPreview ? { view_url: photoPreview } : {}, // Use uploaded photo preview
+      shipping_fee: 0, // Set default value or allow user to input
+      shipping_paid_by: "buyer", // Default or user input
+      shipping_within_days: parseInt(formData.get("shipping_within_days") as string, 10) || 3,
+      expire_in_days: parseInt(formData.get("expire_in_days") as string, 10) || 7,
+      visibility: "public", // Default value
+      image_urls: photoPreview || "", // Use uploaded photo preview
+      additional_images: photoPreview ? [photoPreview] : [],
+      cover_photo: photoPreview || "",
+    };
+  
+    console.log("New Listing Data:", newListing); // Debugging log
+
+    // Add new listing to formattedData
+    formattedCustomData.listings.push(newListing);
+    console.log("Updated Listings:", formattedCustomData.listings); // Debugging log
+
+    handleCustomPostListing()
+    // Reset state & close modal
+    // setTimeout(() => {
+    //   setIsPostingCustom(false);
+    //   setIsCustomModalOpen(false);
+    // }, 500);
+  };
+  
+  const handleCustomPostListing = async () => {
+    const results = [];
+  
+    try {
+      const listingsToPost = formattedCustomData.listings;
+  
+      if (!listingsToPost || listingsToPost.length === 0) {
+        console.log("No listing data available for posting.");
+        return;
+      }
+  
+      for (const listing of listingsToPost) {
+        const listingData = {
+          kind: "item",
+          owner: listing.owner,
+          status: "draft",
+          name: listing.name,
+          description: listing.description,
+          category: "DIGITAL_INGAME",
+          platform: "unknown",
+          upc: listing.upc,
+          price: listing.price,
+          accept_currency: listing.accept_currency,
+          shipping_within_days: listing.shipping_within_days || 3,
+          expire_in_days: listing.expire_in_days || 7,
+          shipping_fee: 0,
+          shipping_paid_by: "seller",
+          shipping_predefined_package: "None",
+          cognitoidp_client: listing.cognitoidp_client,
+          tags: listing.tags || ["id:bundle", "type:custom"],
+          digital: true,
+          digital_region: "none",
+          digital_deliverable: listing.digital_deliverable || "transfer",
+          visibility: "public",
+          image_url: listing.image_urls,
+          additional_images: listing.additional_images || []
+        };
+  
+        try {
+          // First, verify that the image URLs are accessible
+          const verifyImage = async (url) => {
+            try {
+              const response = await fetch(url);
+              return response.ok;
+            } catch (error) {
+              console.error(`Failed to verify image URL: ${url}`);
+              return false;
+            }
+          };
+  
+          // Verify main image
+          const mainImageValid = await verifyImage(listing.image_urls);
+          if (!mainImageValid) {
+            throw new Error(`Main image URL is not accessible: ${listing.image_urls}`);
+          }
+  
+          // Verify additional images
+          if (listing.additional_images) {
+            for (const imgUrl of listing.additional_images) {
+              const additionalImageValid = await verifyImage(imgUrl);
+              if (!additionalImageValid) {
+                throw new Error(`Additional image URL is not accessible: ${imgUrl}`);
+              }
+            }
+          }
+  
+          const response = await axios.post(
+            "http://localhost:8000/api/post-listing-with-image",
+            listingData,
+            { 
+              headers: { 
+                "Content-Type": "application/json"
+              } 
+            }
+          );
+  
+          if (response.data.status === "SUCCESS") {
+            console.log(`Successfully posted listing: ${listing.name}`);
+            setTaskID(response.data.task_id)
+            console.log("Task ID", response.data.task_id)
+            console.log('Response data:', response.data);
+            
+            results.push({
+              listing: listing.name,
+              status: "Success",
+              data: response.data,
+              listingId: response.data.listing_id,
+              imageUrls: response.data.image_urls
+            });
+          }
+        } catch (error) {
+          console.error(`Error posting listing ${listing.name}:`, error);
+  
+          if (
+            error.response?.status === 422 &&
+            error.response?.data?.detail?.includes("listing limit")
+          ) {
+            alert("Listing limit reached. Please remove some listings before adding more.");
+            break;
+          }
+  
+          results.push({
+            listing: listing.name,
+            status: "Failed",
+            error: error.response?.data?.detail || error.message
+          });
+        }
+      }
+  
+      const successfulListings = results.filter(r => r.status === "Success").length;
+  
+      if (successfulListings > 0) {
+        alert(`Successfully created ${successfulListings} out of ${results.length} listings`);
+      } else {
+        throw new Error("Failed to create any listings");
+      }
+  
+    } catch (error) {
+      console.error("Error posting listings:", error);
+      const errorMessage = error.response?.data?.detail || 
+                          error.message || 
+                          "Failed to create listings";
+      alert(errorMessage);
+    } finally {
+      setIsPostingCustom(false);
+      setIsCustomModalOpen(false);
+      // setIsProcessing(false);
+    }
+  };
 
   return (
     <div className="dark min-h-screen bg-background p-4 text-foreground">
@@ -629,12 +759,23 @@ const fetchListings = async (userId: string) => {
                 disabled={isProcessing}
               >
                 {isProcessing
-                  ? "Processing..."
+                  ? "Processing Active..."
                   : isPosting
                     ? "Stop Posting"
                     : "Post Listings"}
               </Button>
-              <Button className="w-full bg-[#9333EA] text-white hover:bg-[#9333EA]/90">
+              <Button
+                variant="destructive"
+                className="w-full"
+                onClick={handleStopPosting}
+                disabled={!isProcessing}
+              >
+                Stop Posting
+              </Button>
+              <Button
+              className="w-full bg-[#9333EA] text-white hover:bg-[#9333EA]/90"
+                onClick={() => setIsCustomModalOpen(true)}
+              >
                 CUSTOM ORDER
               </Button>
               <Button
@@ -899,6 +1040,142 @@ const fetchListings = async (userId: string) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Modal open={isCustomModalOpen} onOpenChange={setIsCustomModalOpen}>
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Custom Listings</ModalTitle>
+          </ModalHeader>
+          <div className="space-y-4 overflow-auto">
+          <form
+          id="custom-order-form"
+          onSubmit={handleCustomListingSubmit}
+          className="overflow-auto">
+
+              {/* Image Upload Section */}
+              <div className="mb-4">
+                <label className="block font-medium text-white/60">Current Image:</label>
+              {photoPreview && (
+                <img src={photoPreview} alt="Preview" className="max-w-full max-h-48 mt-2 rounded-md shadow" />
+              )}
+              <div className="mt-2">
+                <label htmlFor="custom-photo" className="block font-medium text-white/60">Change Photo:</label>
+                <Input
+                  type="file"
+                  id="custom-photo"
+                  name="photo"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                />
+              </div>
+              </div>
+
+              {/* Form Fields */}
+            <div className="mb-4">
+              <label htmlFor="custom-name" className="block font-medium text-white/60">Name:</label>
+              <Input type="text" id="custom-name" name="name" required  />
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="custom-price" className="block font-medium text-white/60">Price:</label>
+              <Input type="number" id="custom-price" name="price" step="0.01" required  />
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="custom-description" className="block font-medium text-white/60">Description:</label>
+              <Textarea id="custom-description" name="description" required></Textarea>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label htmlFor="custom-shipping-within-days" className="block font-medium text-white/60">Shipping in days:</label>
+                <Input type="number" id="custom-shipping-within-days" name="shipping_within_days" defaultValue="3" className="w-full mt-1 p-2 border rounded-md focus:ring focus:ring-indigo-200" />
+              </div>
+              <div>
+                <label htmlFor="custom-expire-in-days" className="block font-medium text-white/60">Expire in days:</label>
+                <Input type="number" id="custom-expire-in-days" name="expire_in_days" defaultValue="7"/>
+              </div>
+            </div>
+
+            {/* Dropdowns */}
+            <div className="mb-4">
+              <label htmlFor="custom-category" className="block font-medium text-white/60">Category:</label>
+              <Select id="custom-category" name="category" required >
+                <SelectTrigger>
+                <SelectValue placeholder="Select a Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="DIGITAL_INGAME">Digital In-Game</SelectItem>
+                <SelectItem  value="DIGITAL_CARD">Digital Card</SelectItem>
+                <SelectItem value="DIGITAL_ITEM">Digital Item</SelectItem>
+                <SelectItem value="PHYSICAL_CARD">Physical Card</SelectItem>
+                <SelectItem value="PHYSICAL_ITEM">Physical Item</SelectItem>
+              </SelectContent>
+              </Select>
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="custom-platform" className="block font-medium text-white/60">Platform:</label>
+              <Select id="custom-platform" name="platform" required >
+                <SelectTrigger>
+                <SelectValue placeholder="Select a Platform" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unknown">Unknown</SelectItem>
+                <SelectItem value="pc">PC</SelectItem>
+                <SelectItem value="ps4">PS4</SelectItem>
+                <SelectItem value="ps5">PS5</SelectItem>
+                <SelectItem value="xboxone">Xbox One</SelectItem>
+                <SelectItem value="switch">Switch</SelectItem>
+              </SelectContent>
+              </Select>
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="custom-kind" className="block font-medium text-gray-700">Kind:</label>
+              <Select id="custom-kind" name="kind" required>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a Kind" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="item">Item</SelectItem>
+                <SelectItem value="gig">Gig</SelectItem>
+                <SelectItem value="drop">Drop</SelectItem>
+              </SelectContent>
+              </Select>
+            </div>
+
+            {/* Tags Section */}
+            <div className="mb-4">
+              <label className="block font-medium text-gray-700">Tags:</label>
+              <div className="p-2 rounded-md min-h-[40px] flex flex-wrap gap-2">
+                {tags.map((tag, index) => (
+                  <span key={index} className="px-2 py-1 bg-white/80 text-black text-sm rounded font-medium">{tag}</span>
+                ))}
+              </div>
+              <div className="flex mt-2 space-x-2">
+                <Input type="text" id="custom-new-tag-input" placeholder="New tag"/>
+                <Button type="button" onClick={addTag}>
+                  Add Tag
+                </Button>
+              </div>
+            </div>
+
+          
+          <ModalFooter>
+            <Button
+              onClick={() => setIsCustomModalOpen(false)}
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="secondary" className={isPostingCustom ? "bg-destructive/70" : ""}>
+                {isPostingCustom ? "Posting..." : "Post Custom Listing"}
+            </Button>
+          </ModalFooter>
+          </form></div>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

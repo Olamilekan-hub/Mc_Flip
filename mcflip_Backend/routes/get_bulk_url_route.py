@@ -26,6 +26,7 @@ async def make_request(session: aiohttp.ClientSession, url: str, api_key: str, a
         try:
             async with session.get(url, params=params, headers=headers) as response:
                 data = await response.json()
+                print(f"ijhugyf", data)
                 if response.status == 200 and data.get('status') != 'FAILURE':
                     return data
                 elif "Invalid api otp" in data.get("error", {}).get("message", ""):

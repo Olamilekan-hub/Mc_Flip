@@ -19,7 +19,7 @@ PROFILE_ENDPOINT = f"{BASE_URL}/account/me/profile"
 # Constants
 DELETE_THRESHOLD_HOURS = 0  # Default, will be overridden by request
 MAX_RETRIES = 2
-DELAY_BETWEEN_OPERATIONS = 1
+DELAY_BETWEEN_OPERATIONS = 0
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -33,6 +33,7 @@ def get_auth_headers(api_key: str, api_secret: str, content_type="application/js
 
     totp = pyotp.TOTP(api_secret)  # Generate one-time password (OTP)
     otp = totp.now()
+    print("Generated OTP:", otp)
 
     headers = {
         "Authorization": f"GFAPI {api_key}:{otp}",
@@ -105,7 +106,7 @@ async def process_old_onsale_listings(session, headers, account_id, delete_thres
         current_time = datetime.now(timezone.utc)
         for listing in listings:
             created_time = datetime.strptime(listing["created"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
-            age_hours = (current_time - created_time).total_seconds() / 3600
+            age_hours = (current_time - created_time).total_seconds() 
 
             if age_hours > delete_threshold_hours:
                 logging.info(f"Processing listing {listing['id']} - Age: {age_hours:.2f} hours")
