@@ -675,7 +675,7 @@ const fetchListings = async (userId: string) => {
           }
   
           const response = await axios.post(
-            "http://localhost:8000/api/post-listing-with-image",
+            "http://localhost:8000/api/custom-post-listing",
             listingData,
             { 
               headers: { 
