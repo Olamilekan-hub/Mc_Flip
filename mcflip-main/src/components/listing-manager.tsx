@@ -364,7 +364,7 @@ console.log("Sel", selectedItems)
     try {
       const response = await axios.post(
         `http://localhost:8000/api/post-listing-with-image?task_id=${taskID}&stop=true`,
-        { stop: true, task_id: taskID },
+        // { stop: true, task_id: taskID },
         { headers: { "Content-Type": "application/json" } }
       );
   
