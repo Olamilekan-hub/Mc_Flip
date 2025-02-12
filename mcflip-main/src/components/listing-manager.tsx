@@ -45,7 +45,7 @@ import {
 } from "~/components/ui/select";
 
 export function ListingManager() {
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [selectedItems, setSelectedItems] = useState<Listing[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -91,6 +91,7 @@ export function ListingManager() {
       });
     }
 
+
 const fetchKeys = async () => {
   const docRef = doc(db, "users", userID);
   const docSnap = await getDoc(docRef);
@@ -128,39 +129,42 @@ const fetchListings = async (userId: string) => {
     console.log("Fetched listings from Firestore:", savedListings);
   }; 
 
-  const listings = [
-    { id: "1", name: "20k floor launchers", icon: "📦" },
-    { id: "2", name: "MSK MATERIAL BUNDLE", icon: "🎁" },
-    { id: "3", name: "RUSTY MECHANICAL PARTS", icon: "⚙️" },
-    { id: "4", name: "msk and pre-quest carry", icon: "🎮" },
-    { id: "5", name: "20k zap-o-max", icon: "⚡" },
-    { id: "6", name: "VENTURE XP 50k", icon: "📈" },
-    { id: "7", name: "STURDY TWINE", icon: "🧵" },
-  ];
+  const dataResponse = responseData?.data;
+  console.log("AA",dataResponse)
 
-  const filteredListings = listings.filter((item) =>
+  const filteredResponse = dataResponse?.filter((item) =>
     item.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+  console.log("fil", filteredResponse)
 
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked);
     if (checked) {
-      setSelectedItems(listings.map((item) => item.id));
+      setSelectedItems(filteredResponse);
+    console.log("Sel", selectedItems)
     } else {
-      setSelectedItems([]);
+      setSelectedItems([]); // Clear all selections
+      console.log("Sel", selectedItems)
     }
   };
+  
 
-  const handleItemSelect = (id: string, checked: boolean) => {
+  const handleItemSelect = (item: { id: string; name: string; image_urls: string[]; price?: number }, checked: boolean) => {
     if (checked) {
-      setSelectedItems([...selectedItems, id]);
+      setSelectedItems((prev: ResponseData["data"] = []) => [...prev, item]); // Add full item details
+    console.log("Sel", selectedItems)
     } else {
-      setSelectedItems(selectedItems.filter((itemId) => itemId !== id));
+      setSelectedItems((prev: ResponseData["data"] = []) => prev.filter((selected) => selected?.id !== item.id)); // Remove item
+      console.log("Sel", selectedItems)
     }
   };
 
-  const dataResponse = responseData?.data;
-  console.log("AA",dataResponse)
+
+// Check if all filtered items are selected
+const allSelected = (filteredResponse?.length ?? 0) > 0 && filteredResponse?.every((item) =>
+  selectedItems.some((selected) => selected.id === item.id),
+console.log("Sel", selectedItems)
+);
 
   interface Listing {
     id: string;
@@ -188,7 +192,7 @@ const fetchListings = async (userId: string) => {
   }
   
   const formattedData: { listings: Listing[] } = {
-    listings: (fetchedList ?? []).map((listing: Listing) => ({
+    listings: selectedItems.map((listing: Listing) => ({
       id: listing.id,
       kind: listing.kind,
       description: listing.description,
@@ -210,7 +214,7 @@ const fetchListings = async (userId: string) => {
       visibility: listing.visibility, // Added missing property
       image_urls: typeof listing.photo === 'object' && typeof listing.cover_photo === 'string' && listing.photo[listing.cover_photo] && 'view_url' in listing.photo[listing.cover_photo] ? (listing.photo[listing.cover_photo] as { view_url: string }).view_url : '',
       additional_images: Object.values(listing.photo)
-        .map((photo: any) => (typeof photo === 'object' && 'view_url' in photo ? photo.view_url : ''))
+        .map((photo: { view_url?: string }) => (typeof photo === 'object' && 'view_url' in photo ? photo.view_url : ''))
         .filter(url => typeof url === "string" && url.trim() !== ""),
       cover_photo: listing.cover_photo? listing.cover_photo : "",
     })),
@@ -263,7 +267,7 @@ const fetchListings = async (userId: string) => {
               const response = await fetch(url);
               return response.ok;
             } catch (error) {
-              console.error(`Failed to verify image URL: ${url}`);
+              console.error(`Failed to verify image URL: ${url}`);setIsProcessing(false);
               return false;
             }
           };
@@ -272,6 +276,7 @@ const fetchListings = async (userId: string) => {
           const mainImageValid = await verifyImage(listing.image_urls);
           if (!mainImageValid) {
             throw new Error(`Main image URL is not accessible: ${listing.image_urls}`);
+            setIsProcessing(false);
           }
   
           // Verify additional images
@@ -280,6 +285,7 @@ const fetchListings = async (userId: string) => {
               const additionalImageValid = await verifyImage(imgUrl);
               if (!additionalImageValid) {
                 throw new Error(`Additional image URL is not accessible: ${imgUrl}`);
+                setIsProcessing(false);
               }
             }
           }
@@ -310,6 +316,7 @@ const fetchListings = async (userId: string) => {
           }
         } catch (error) {
           console.error(`Error posting listing ${listing.name}:`, error);
+          setIsProcessing(false);
   
           if (
             error.response?.status === 422 &&
@@ -333,6 +340,7 @@ const fetchListings = async (userId: string) => {
         alert(`Successfully created ${successfulListings} out of ${results.length} listings`);
       } else {
         throw new Error("Failed to create any listings");
+        setIsProcessing(false);
       }
   
     } catch (error) {
@@ -340,6 +348,7 @@ const fetchListings = async (userId: string) => {
       const errorMessage = error.response?.data?.detail || 
                           error.message || 
                           "Failed to create listings";
+                          setIsProcessing(false);
       alert(errorMessage);
     } finally {
       // setIsProcessing(false);
@@ -354,7 +363,7 @@ const fetchListings = async (userId: string) => {
   
     try {
       const response = await axios.post(
-        "http://localhost:8000/api/post-listing-with-image",
+        `http://localhost:8000/api/post-listing-with-image?task_id=${taskID}&stop=true`,
         { stop: true, task_id: taskID },
         { headers: { "Content-Type": "application/json" } }
       );
@@ -452,12 +461,6 @@ const fetchListings = async (userId: string) => {
     // Simulate API call or actual posting logic
     await new Promise((resolve) => setTimeout(resolve, 1500));
     console.log("Started posting listings");
-  };
-
-  const stopPosting = async () => {
-    // Simulate API call or actual stopping logic
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    console.log("Stopped posting listings");
   };
 
   const fetchBulkList = async () => {
@@ -838,7 +841,7 @@ const fetchListings = async (userId: string) => {
             />
             <div className="flex items-center space-x-2">
               <Switch
-                checked={selectAll}
+                checked={allSelected}
                 onCheckedChange={handleSelectAll}
                 id="select-all"
               />
@@ -846,58 +849,31 @@ const fetchListings = async (userId: string) => {
                 Select All
               </label>
             </div>
-          </div>
+            </div>
 
-          <div className="space-y-2">
-            {responseData?.data && (
-              <div className="space-y-2">
-                {responseData.data.map(
-                  (item: {
-                    id: string;
-                    name: string;
-                    image_urls: string[];
-                    price?: number;
-                  }) => (
+            <div className="space-y-2">
+              {filteredResponse && (
+                <div className="space-y-2">
+                  {filteredResponse.map((item) => (
                     <div
                       key={item.id}
                       className="flex items-center space-x-3 rounded-lg border border-border p-2 text-xl text-white hover:bg-accent hover:text-accent-foreground"
                     >
                       <Switch
-                        checked={selectedItems.includes(item.id)}
-                        onCheckedChange={(checked) =>
-                          handleItemSelect(item.id, checked)
-                        }
+                        checked={selectedItems.some((selected) => selected.id === item.id)}
+                        onCheckedChange={(checked) => handleItemSelect(item, checked)}
                       />
                       <img
-                        src={`http://localhost:8000/static/${item.image_urls[0]}`}
+                        src={`http://localhost:8000/static/${item.image_urls?.[0]}`}
                         alt={item.name}
                         className="h-10 w-10 rounded-full"
                       />
                       <span className="text-xl">{item.name}</span>
-                      <span>
-                        {item.price ? `$${item.price}` : "Price not available"}
-                      </span>
+                      <span>{item.price ? `$${item.price}` : "Price not available"}</span>
                     </div>
-                  ),
-                )}
-              </div>
-            )}
-
-            {filteredListings.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center space-x-3 rounded-lg border border-border p-2 text-white hover:bg-accent hover:text-accent-foreground"
-              >
-                <Switch
-                  checked={selectedItems.includes(item.id)}
-                  onCheckedChange={(checked) =>
-                    handleItemSelect(item.id, checked)
-                  }
-                />
-                <span className="text-xl">{item.icon}</span>
-                <span>{item.name}</span>
-              </div>
-            ))}
+                  ))}
+            </div>
+          )}
           </div>
         </Card>
       </div>
