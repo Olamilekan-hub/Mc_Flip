@@ -106,6 +106,11 @@ if (status === "authenticated" && userID) {
   fetchKeys().catch((error) => {
     console.error("Error fetching API keys:", error);
   });
+  
+if (!isCustomModalOpen) {
+    setTags([]);
+    setPhotoPreview(null);
+  }
 }}, [status]);
 
 
@@ -543,6 +548,9 @@ const fetchListings = async (userId: string) => {
       setTags([...tags, newTag]);
       tagInput.value = "";
     }
+    if (!isCustomModalOpen) {
+      setTags([]);
+    }
   };
 
   // Handle image preview
@@ -554,6 +562,9 @@ const fetchListings = async (userId: string) => {
         setPhotoPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+    if (!isCustomModalOpen) {
+      setPhotoPreview(null);
     }
   };
 
@@ -601,11 +612,6 @@ const fetchListings = async (userId: string) => {
     console.log("Updated Listings:", formattedCustomData.listings); // Debugging log
 
     handleCustomPostListing()
-    // Reset state & close modal
-    // setTimeout(() => {
-    //   setIsPostingCustom(false);
-    //   setIsCustomModalOpen(false);
-    // }, 500);
   };
   
   const handleCustomPostListing = async () => {
@@ -734,7 +740,8 @@ const fetchListings = async (userId: string) => {
     } finally {
       setIsPostingCustom(false);
       setIsCustomModalOpen(false);
-      // setIsProcessing(false);
+      setTags([]);
+      setPhotoPreview(null);
     }
   };
 
