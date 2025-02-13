@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { signOut } from "next-auth/react";
 import { useSession } from "next-auth/react";
-import { collection, doc, setDoc, getDocs, getDoc } from "firebase/firestore";
+import { collection, doc, setDoc, getDocs, getDoc, updateDoc, DocumentData, DocumentReference } from "firebase/firestore";
 import { db } from "../lib/firebase"; 
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
@@ -43,9 +43,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { CiEdit } from "react-icons/ci";
+import { BiSave } from "react-icons/bi";
 
 export function ListingManager() {
   const [selectedItems, setSelectedItems] = useState<Listing[]>([]);
+  const [selectedItem, setSelectedItem] = useState<Listing[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -53,6 +56,7 @@ export function ListingManager() {
   const [isNumListingModalOpen, setIsNumListingModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [deleteOption, setDeleteOption] = useState<string>("");
   const [daysToDelete, setDaysToDelete] = useState<number>(30);
   const [importUrls, setImportUrls] = useState("");
@@ -68,7 +72,7 @@ export function ListingManager() {
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [taskID, setTaskID] = useState("");
-  const [fetchedList, setFetchedList] = useState([]);
+  const [fetchedList, setFetchedList] = useState<Listing[]>([]);
   const [responseData, setResponseData] = useState<ResponseData | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -748,6 +752,121 @@ console.log("Sel", selectedItems)
     }
   };
 
+  const handleEditClick = (item: Listing) => {
+    setSelectedItem(item);
+    console.log("Item", item)
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditPrice = async (event) => {
+    event.preventDefault();
+  
+    // Ensure selectedItem is not null
+    if (!selectedItem) {
+      alert("No item selected!");
+      return;
+    }
+  
+    // Get the price input value
+    const priceInput = event.target.elements[`price-${selectedItem.id}`]?.value;
+    if (!priceInput) {
+      alert("Price cannot be empty!");
+      return;
+    }
+  
+    const updatedListing = {
+      id: selectedItem.id,
+      price: parseFloat(priceInput),
+    };
+    console.log("hygtfvcdu", pdatedListing)
+  
+    try {
+      const allListingsRef = doc(db, "users", userID, "importedListings", "allListings");
+  
+      const docSnap = await getDoc(allListingsRef);
+  
+      if (!docSnap.exists()) {
+        console.error("Error: 'allListings' document does not exist.");
+        alert("The price data is missing. Please refresh the page.");
+        return;
+      }
+  
+      // Get the listings array
+      const data = docSnap.data();
+      const listings = data.listings || [];
+  
+      // Find and update the specific listing inside the array
+      const updatedListings = listings.map((listing) =>
+        listing.id === selectedItem.id ? { ...listing, ...updatedListing } : listing
+      );
+  
+      // Update Firestore document
+      await updateDoc(allListingsRef, { listings: updatedListings });
+  
+      console.log("Price updated successfully");
+      alert("Price updated successfully!");
+    
+
+    } catch (error) {
+      console.error("Error updating Price:", error);
+      alert(error.message);
+    } finally {
+      fetchListings(userID); // Refresh listings
+    }
+  };
+  
+
+  const handleEditSubmit = async (event) => {
+    event.preventDefault();
+  
+    const updatedListing = {
+      id: selectedItem.id, // Ensure ID remains the same
+      name: event.target.name.value,
+      price: event.target.price.value,
+      description: event.target.description.value,
+      category: event.target.category.value,
+      // Add other fields if needed
+    };
+  
+    try {
+      const allListingsRef = doc(db, "users", userID, "importedListings", "allListings");
+  
+      const docSnap = await getDoc(allListingsRef);
+  
+      if (!docSnap.exists()) {
+        console.error("Error: 'allListings' document does not exist.");
+        alert("The listings data is missing. Please refresh the page.");
+        return;
+      }
+  
+      // Get the listings array
+      const data = docSnap.data();
+      const listings = data.listings || [];
+  
+      // Find and update the specific listing inside the array
+      const updatedListings: Listing[] = listings.map((listing: Listing) =>
+        listing.id === selectedItem.id ? { ...listing, ...updatedListing } : listing
+      );
+  
+      // Update Firestore with the new listings array
+      await updateDoc(allListingsRef, { listings: updatedListings });
+  
+      // Update local state to reflect changes immediately
+      // setResponseData(updatedListings.data);
+  
+      setIsEditModalOpen(false);
+      console.log("Listing updated successfully");
+      alert("Listing updated successfully!");
+    } catch (error) {
+      console.error("Error updating listing:", error);
+      alert(error.message);
+    } finally {
+      fetchListings(userID)
+    }
+  };
+  
+  
+
   return (
     <div className="dark min-h-screen bg-background p-4 text-foreground">
       <h2 className="mb-4 text-xl font-bold text-white">Create New Listing</h2>
@@ -856,9 +975,11 @@ console.log("Sel", selectedItems)
                 <div className="space-y-2">
                   {filteredResponse.map((item) => (
                     <div
-                      key={item.id}
-                      className="flex items-center space-x-3 rounded-lg border border-border p-2 text-xl text-white hover:bg-accent hover:text-accent-foreground"
+                    key={item.id}
+                    id={item.id}
+                      className="flex items-center space-x-3 rounded-lg border border-border p-2 text-xl text-white hover:bg-accent hover:text-accent-foreground w-full justify-between"
                     >
+                    <div className="space-x-2 flex items-center">
                       <Switch
                         checked={selectedItems.some((selected) => selected.id === item.id)}
                         onCheckedChange={(checked) => handleItemSelect(item, checked)}
@@ -869,7 +990,41 @@ console.log("Sel", selectedItems)
                         className="h-10 w-10 rounded-full"
                       />
                       <span className="text-xl">{item.name}</span>
-                      <span>{item.price ? `$${item.price}` : "Price not available"}</span>
+                      </div>
+
+                    <div className="space-x-2 flex items-center justify-center">
+
+                    <form onSubmit={handleEditPrice}>
+                      <div className="flex items-center space-x-1 rounded-md border border-input bg-background p-1 text-sm">
+                        <span>$</span>
+                        <input 
+                          type="number" 
+                          id={`price-${item.id}`} 
+                          name="price" 
+                          defaultValue={item.price} 
+                          step="0.01" 
+                          className="w-16 h-6 flex bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" 
+                        />
+                        <button
+                          className="flex justify-center items-center space-x-2 p-1 bg-primary text-primary-foreground hover:bg-primary/90 rounded-sm"
+                          type="submit"
+                          onClick={() => setSelectedItem(item)}
+                        >
+                          <BiSave className="mr-2 h-4 w-4" />
+                          Save
+                        </button>
+                      </div>
+                    </form>
+
+
+                      <Button
+                        variant="outlineInverse"
+                        onClick={(e) => handleEditClick(item)}
+                      >
+                        <CiEdit className="mr-2 h-4 w-4" />
+                        Edit
+                      </Button>
+                      </div>
                     </div>
                   ))}
             </div>
@@ -1159,6 +1314,70 @@ console.log("Sel", selectedItems)
           </form></div>
         </ModalContent>
       </Modal>
+
+      <Modal open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Edit Listing</ModalTitle>
+          </ModalHeader>
+          <div className="space-y-4 overflow-auto">
+            <form onSubmit={handleEditSubmit} className="overflow-auto">
+              
+              {/* Image Upload */}
+              <div className="mb-4">
+                <label className="block font-medium text-white/60">Current Image:</label>
+                {selectedItem?.image_urls && (
+                  <img src={`http://localhost:8000/static/${selectedItem.image_urls[0]}`} alt="Preview" className="max-w-full max-h-48 mt-2 rounded-md shadow" />
+                )}
+                <div className="mt-2">
+                  <label htmlFor="custom-photo" className="block font-medium text-white/60">Change Photo:</label>
+                  <Input type="file" id="custom-photo" name="photo" accept="image/*" />
+                </div>
+              </div>
+
+              {/* Form Fields */}
+              <div className="mb-4">
+                <label htmlFor="custom-name" className="block font-medium text-white/60">Name:</label>
+                <Input type="text" id="custom-name" name="name" defaultValue={selectedItem?.name} required />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="custom-price" className="block font-medium text-white/60">Price:</label>
+                <Input type="number" id="custom-price" name="price" defaultValue={selectedItem?.price} step="0.01" required />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="custom-description" className="block font-medium text-white/60">Description:</label>
+                <Textarea id="custom-description" name="description" defaultValue={selectedItem?.description} required />
+              </div>
+
+              {/* Dropdowns */}
+              <div className="mb-4">
+                <label htmlFor="custom-category" className="block font-medium text-white/60">Category:</label>
+                <Select id="custom-category" name="category" defaultValue={selectedItem?.category} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DIGITAL_INGAME">Digital In-Game</SelectItem>
+                    <SelectItem value="DIGITAL_CARD">Digital Card</SelectItem>
+                    <SelectItem value="DIGITAL_ITEM">Digital Item</SelectItem>
+                    <SelectItem value="PHYSICAL_CARD">Physical Card</SelectItem>
+                    <SelectItem value="PHYSICAL_ITEM">Physical Item</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Submit and Cancel Buttons */}
+              <ModalFooter>
+                <Button onClick={() => setIsEditModalOpen(false)} variant="outline">Cancel</Button>
+                <Button type="submit" variant="secondary">Save Changes</Button>
+              </ModalFooter>
+            </form>
+          </div>
+        </ModalContent>
+      </Modal>
+
     </div>
   );
 }
