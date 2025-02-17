@@ -22,6 +22,9 @@ API_KEY = os.getenv("API_KEY")
 API_SECRET = os.getenv("API_SECRET")
 totp = pyotp.TOTP(API_SECRET)
 
+# Global stop flag for all tasks
+GLOBAL_STOP_FLAG = False
+
 # Store active posting tasks with their state
 active_tasks: Dict[str, Any] = {}
 
@@ -213,8 +216,10 @@ async def update_listing_status(session, listing_id: str, status: str = "onsale"
 
 async def continuous_posting(listing_data: ListingRequest, task_id: str, state: ListingState):
     """Background task to continuously post listings with improved state management"""
+    global GLOBAL_STOP_FLAG
+    
     try:
-        while state.is_active:
+        while state.is_active and not GLOBAL_STOP_FLAG:
             try:
                 async with aiohttp.ClientSession() as session:
                     # Step 1: Create initial listing in draft status
@@ -299,14 +304,31 @@ async def post_listing_with_image(
     listing_data: ListingRequest,
     background_tasks: BackgroundTasks,
     task_id: Optional[str] = None,
-    stop: Optional[bool] = False
+    stop: Optional[bool] = False,
+    global_stop: Optional[bool] = False
 ):
     """Creates listings continuously with images on Gameflip until stopped"""
+    global GLOBAL_STOP_FLAG
+    
+    # Global stop mechanism
+    if global_stop:
+        GLOBAL_STOP_FLAG = True
+        stopped_tasks = list(active_tasks.keys())
+        active_tasks.clear()
+        return {
+            "message": "Stopping all listing creation tasks",
+            "status": "SUCCESS",
+            "stopped_tasks": stopped_tasks
+        }
+    
+    # Reset global stop flag if it was previously set
+    GLOBAL_STOP_FLAG = False
+    
     # Generate a task ID if not provided
     if not task_id:
         task_id = f"task_{len(active_tasks) + 1}_{int(datetime.now().timestamp())}"
     
-    # Handle stop request
+    # Handle stop request for a specific task
     if stop:
         if task_id in active_tasks:
             state = active_tasks[task_id]

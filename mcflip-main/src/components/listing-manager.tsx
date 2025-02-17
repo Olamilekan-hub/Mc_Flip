@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, ChangeEvent } from "react";
 import axios from "axios";
 import { signOut } from "next-auth/react";
 import { useSession } from "next-auth/react";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, doc, setDoc, getDocs, getDoc, updateDoc, DocumentData, DocumentReference } from "firebase/firestore";
-import { db } from "../lib/firebase"; 
+import { db, storage } from "../lib/firebase"; 
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -35,6 +36,8 @@ import {
   Link2,
   ClipboardList,
   Trash2,
+  Copy,
+  Check,
 } from "lucide-react";
 import {
   Select,
@@ -47,6 +50,7 @@ import { CiEdit } from "react-icons/ci";
 import { BiSave } from "react-icons/bi";
 
 export function ListingManager() {
+  const [copied, setCopied] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Listing[]>([]);
   const [selectedItem, setSelectedItem] = useState<Listing[]>([]);
   const [selectAll, setSelectAll] = useState(false);
@@ -64,19 +68,27 @@ export function ListingManager() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isPostingCustom, setIsPostingCustom] = useState(false);
   const [urls, setUrls] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [loadingNumListing, setLoadingNumListing] = useState(false);
-  const [numListing, setNumListing] = useState(null);
-  const [apiKey, setApiKey] = useState("");
-  const [apiSecret, setApiSecret] = useState("");
-  const [taskID, setTaskID] = useState("");
-  const [fetchedList, setFetchedList] = useState<Listing[]>([]);
+  const [numListing, setNumListing] = useState<number | null>(null);
+  const [apiKey, setApiKey] = useState<string>("");
+  const [apiSecret, setApiSecret] = useState<string>("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null); // Cloudinary URL
+  const [isUploading, setIsUploading] = useState(false);
+  // const [timeBetweenListings, setTimeBetweenListings] = useState<string>("");
+  // const [deleteListingsHours, setDeleteListingsHours] = useState<string>("");
+  // const [taskID, setTaskID] = useState([]);
+  // const [fetchedList, setFetchedList] = useState<Listing[]>([]);
   const [responseData, setResponseData] = useState<ResponseData | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [isPostingCustom, setIsPostingCustom] = useState(false);
+  // const [photoPreview, setPhotoPreview] = useState<Blob | ArrayBufferLike>(new Blob());
+  const [imageURL, setImageURL] = useState('');
+  // const [isUploading, setIsUploading] = useState(false);
 
 
   interface ResponseData {
@@ -96,42 +108,45 @@ export function ListingManager() {
     }
 
 
-const fetchKeys = async () => {
-  const docRef = doc(db, "users", userID);
-  const docSnap = await getDoc(docRef);
+    const fetchApiKeys = async () => {
+          const docRef = doc(db, "users", userID);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            console.log(data)
+            setApiKey(typeof data.apiKey === "string" ? data.apiKey : "");
+            setApiSecret(typeof data.apiSecret === "string" ? data.apiSecret : "");
+            setTimeBetweenListings(typeof data.timeBetweenListings === "string" ? data.timeBetweenListings : "" );
+            setDeleteListingsHours(typeof data.deleteListingsHours === "string" ? data.deleteListingsHours : "");
+          }
+        };
 
-  if (docSnap.exists()) {
-    const data = docSnap.data();
-    setApiKey(typeof data.apiKey === "string" ? data.apiKey : "");
-    setApiSecret(typeof data.apiSecret === "string" ? data.apiSecret : "");
-  }
-};
-
-if (status === "authenticated" && userID) {
-  fetchKeys().catch((error) => {
-    console.error("Error fetching API keys:", error);
-  });
-  
-if (!isCustomModalOpen) {
-    setTags([]);
-    setPhotoPreview(null);
-  }
-}}, [status]);
+    if (status === "authenticated" && userID) {
+      fetchApiKeys().catch((error) => {
+        console.error("Error fetching API keys:", error);
+      });
+    
+      if (!isCustomModalOpen) {
+        setTags([]);
+        setPhotoPreview(null);
+      }
+    }
+  }, [status]);
 
 
-const fetchListings = async (userId: string) => {
-    const userCollection = collection(db, "users", userId, "importedListings");
-  
-    const querySnapshot = await getDocs(userCollection);
-    let savedListings = querySnapshot.docs.map((doc) => doc.data());
-  
-    // Ensure savedListings is an array of items, not an array of objects containing listings arrays
-    savedListings = savedListings.flatMap((entry) => entry.listings || []);
-  
-     setFetchedList(savedListings);
-     setResponseData({ data: savedListings });
-    console.log("Fetched listings from Firestore:", savedListings);
-  }; 
+  const fetchListings = async (userId: string) => {
+      const userCollection = collection(db, "users", userId, "importedListings");
+    
+      const querySnapshot = await getDocs(userCollection);
+      let savedListings = querySnapshot.docs.map((doc) => doc.data());
+    
+      // Ensure savedListings is an array of items, not an array of objects containing listings arrays
+      savedListings = savedListings.flatMap((entry) => entry.listings || []);
+    
+      //  setFetchedList(savedListings);
+      setResponseData({ data: savedListings });
+      console.log("Fetched listings from Firestore:", savedListings);
+    }; 
 
   const dataResponse = responseData?.data;
   console.log("AA",dataResponse)
@@ -162,7 +177,6 @@ const fetchListings = async (userId: string) => {
       console.log("Sel", selectedItems)
     }
   };
-
 
 // Check if all filtered items are selected
 const allSelected = (filteredResponse?.length ?? 0) > 0 && filteredResponse?.every((item) =>
@@ -215,7 +229,7 @@ console.log("Sel", selectedItems)
       shipping_paid_by: listing.shipping_paid_by,
       shipping_within_days: listing.shipping_within_days,
       expire_in_days: listing.expire_in_days,
-      visibility: listing.visibility, // Added missing property
+      visibility: listing.visibility,
       image_urls: typeof listing.photo === 'object' && typeof listing.cover_photo === 'string' && listing.photo[listing.cover_photo] && 'view_url' in listing.photo[listing.cover_photo] ? (listing.photo[listing.cover_photo] as { view_url: string }).view_url : '',
       additional_images: Object.values(listing.photo)
         .map((photo: { view_url?: string }) => (typeof photo === 'object' && 'view_url' in photo ? photo.view_url : ''))
@@ -225,167 +239,175 @@ console.log("Sel", selectedItems)
   };
   console.log("fd",formattedData)
 
+// Helper function to verify image URLs
+  const verifyImage = async (url) => {
+    if (!url) return false;
+    
+    try {
+      const response = await fetch(url);
+      return response.ok;
+    } catch (error) {
+      console.error(`Failed to verify image URL: ${url}`);
+      return false;
+    }
+  };
+
   const handlePostListing = async () => {
     setIsProcessing(true);
-    const results = [];
-  
+    
     try {
       const listingsToPost = formattedData.listings;
-  
+      
       if (!listingsToPost || listingsToPost.length === 0) {
-        console.log("No listing data available for posting.");
+        alert("No listing data available for posting.");
+        setIsProcessing(false);
         return;
       }
-  
+      
+      // Array to store all task IDs
+      const taskIds = [];
+      
+      // Process each listing
       for (const listing of listingsToPost) {
+        // Verify main image
+        if (listing.image_urls) {
+          const mainImageValid = await verifyImage(listing.image_urls);
+          if (!mainImageValid) {
+            throw new Error(`Main image URL is not accessible: ${listing.image_urls}`);
+          }
+        }
+        
+        // Verify additional images
+        if (listing.additional_images && listing.additional_images.length > 0) {
+          for (const imgUrl of listing.additional_images) {
+            const additionalImageValid = await verifyImage(imgUrl);
+            if (!additionalImageValid) {
+              throw new Error(`Additional image URL is not accessible: ${imgUrl}`);
+            }
+          }
+        }
+        
+        // Prepare listing data according to the FastAPI model
         const listingData = {
-          kind: "item",
+          kind: listing.kind || "item",
           owner: listing.owner,
           status: "draft",
           name: listing.name,
           description: listing.description,
-          category: "DIGITAL_INGAME",
-          platform: "unknown",
-          upc: listing.upc,
-          price: listing.price,
-          accept_currency: listing.accept_currency,
-          shipping_within_days: listing.shipping_within_days || 3,
-          expire_in_days: listing.expire_in_days || 7,
+          category: listing.category || "DIGITAL_INGAME",
+          platform: listing.platform || "unknown",
+          upc: listing.upc || "",
+          price: parseInt(listing.price) || 0,
+          accept_currency: listing.accept_currency || "USD",
+          shipping_within_days: parseInt(listing.shipping_within_days) || 3,
+          expire_in_days: parseInt(listing.expire_in_days) || 7,
           shipping_fee: 0,
-          shipping_paid_by: "seller",
-          shipping_predefined_package: "None",
-          cognitoidp_client: listing.cognitoidp_client,
-          tags: listing.tags || ["id:bundle", "type:custom"],
-          digital: true,
-          digital_region: "none",
+          shipping_paid_by: listing.shipping_paid_by || "seller",
+          shipping_predefined_package: listing.shipping_predefined_package || "None",
+          cognitoidp_client: listing.cognitoidp_client || "",
+          tags: Array.isArray(listing.tags) ? listing.tags : ["id:bundle", "type:custom"],
+          digital: listing.digital !== undefined ? Boolean(listing.digital) : true,
+          digital_region: listing.digital_region || "none",
           digital_deliverable: listing.digital_deliverable || "transfer",
-          visibility: "public",
-          image_url: listing.image_urls,
-          additional_images: listing.additional_images || []
+          visibility: listing.visibility || "public",
+          image_url: listing.image_urls || null,
+          additional_images: Array.isArray(listing.additional_images) ? listing.additional_images : []
         };
-  
-        try {
-          // First, verify that the image URLs are accessible
-          const verifyImage = async (url) => {
-            try {
-              const response = await fetch(url);
-              return response.ok;
-            } catch (error) {
-              console.error(`Failed to verify image URL: ${url}`);setIsProcessing(false);
-              return false;
-            }
-          };
-  
-          // Verify main image
-          const mainImageValid = await verifyImage(listing.image_urls);
-          if (!mainImageValid) {
-            throw new Error(`Main image URL is not accessible: ${listing.image_urls}`);
-            setIsProcessing(false);
+        
+        // Ensure numeric fields are actually numbers
+        listingData.price = Number(listingData.price);
+        listingData.shipping_within_days = Number(listingData.shipping_within_days);
+        listingData.expire_in_days = Number(listingData.expire_in_days);
+        listingData.shipping_fee = Number(listingData.shipping_fee);
+        
+        console.log("Sending listing data:", JSON.stringify(listingData, null, 2));
+        
+        // Start the posting process for this listing
+        const response = await axios.post(
+          "http://localhost:8000/api/post-listing-with-image",
+          listingData,
+          { 
+            headers: { 
+              "Content-Type": "application/json"
+            } 
           }
-  
-          // Verify additional images
-          if (listing.additional_images) {
-            for (const imgUrl of listing.additional_images) {
-              const additionalImageValid = await verifyImage(imgUrl);
-              if (!additionalImageValid) {
-                throw new Error(`Additional image URL is not accessible: ${imgUrl}`);
-                setIsProcessing(false);
-              }
-            }
-          }
-  
-          const response = await axios.post(
-            "http://localhost:8000/api/post-listing-with-image",
-            listingData,
-            { 
-              headers: { 
-                "Content-Type": "application/json"
-              } 
-            }
-          );
-  
-          if (response.data.status === "SUCCESS") {
-            console.log(`Successfully posted listing: ${listing.name}`);
-            setTaskID(response.data.task_id)
-            console.log("Task ID", response.data.task_id)
-            console.log('Response data:', response.data);
-            
-            results.push({
-              listing: listing.name,
-              status: "Success",
-              data: response.data,
-              listingId: response.data.listing_id,
-              imageUrls: response.data.image_urls
-            });
-          }
-        } catch (error) {
-          console.error(`Error posting listing ${listing.name}:`, error);
-          setIsProcessing(false);
-  
-          if (
-            error.response?.status === 422 &&
-            error.response?.data?.detail?.includes("listing limit")
-          ) {
-            alert("Listing limit reached. Please remove some listings before adding more.");
-            break;
-          }
-  
-          results.push({
-            listing: listing.name,
-            status: "Failed",
-            error: error.response?.data?.detail || error.message
-          });
+        );
+        
+        if (response.data.status === "SUCCESS") {
+          taskIds.push(response.data.task_id);
+          console.log(`Started posting for listing with task ID: ${response.data.task_id}`);
+        } else {
+          throw new Error(`Failed to start posting process for listing: ${listing.name}`);
         }
       }
-  
-      const successfulListings = results.filter(r => r.status === "Success").length;
-  
-      if (successfulListings > 0) {
-        alert(`Successfully created ${successfulListings} out of ${results.length} listings`);
-      } else {
-        throw new Error("Failed to create any listings");
-        setIsProcessing(false);
+      
+      if (taskIds.length > 0) {
+        setTaskID(taskIds); // Update state to store multiple task IDs
+        alert(`Successfully started posting process for ${taskIds.length} listings.`);
+        setIsPosting(true);
       }
-  
+      
     } catch (error) {
-      console.error("Error posting listings:", error);
+      console.error("Error in posting process:", error);
       const errorMessage = error.response?.data?.detail || 
-                          error.message || 
-                          "Failed to create listings";
-                          setIsProcessing(false);
+                           error.message || 
+                           "Failed to start listing process";
       alert(errorMessage);
-    } finally {
-      // setIsProcessing(false);
-    }
-  };
-  
-  const handleStopPosting = async () => {
-    if (!taskID) {
-      alert("No active posting task found.");
-      return;
-    }
-  
-    try {
-      const response = await axios.post(
-        `http://localhost:8000/api/post-listing-with-image?task_id=${taskID}&stop=true`,
-        // { stop: true, task_id: taskID },
-        { headers: { "Content-Type": "application/json" } }
-      );
-  
-      if (response.data.status === "SUCCESS") {
-        alert(`Stopped posting task ${taskID}`);
-        console.log("Task stopped:", response.data);
-      } else {
-        alert("Failed to stop posting.");
-      }
-    } catch (error) {
-      console.error("Error stopping posting:", error);
-      alert("Error stopping the listing process.");
     } finally {
       setIsProcessing(false);
     }
   };
   
+  const handleStopPosting = async () => {
+    setIsProcessing(true);
+    
+    try {
+      // Create a minimal valid ListingRequest object
+      const dummyListingData = {
+        kind: "item",
+        owner: "dummy_owner",
+        name: "Stopping all tasks",
+        description: "This is a dummy listing to stop all tasks",
+        category: "DIGITAL_INGAME",
+        platform: "unknown",
+        upc: "000000000000",
+        price: 0,
+        accept_currency: "USD",
+        shipping_within_days: 1,
+        expire_in_days: 1,
+        shipping_paid_by: "seller",
+        shipping_predefined_package: "None",
+        cognitoidp_client: "dummy",
+        tags: [],
+        digital: true,
+        digital_region: "none",
+        digital_deliverable: "transfer",
+        visibility: "private"
+      };
+      
+      // Send the request with global_stop=true and a valid body
+      const response = await axios.post(
+        "http://localhost:8000/api/post-listing-with-image?global_stop=true",
+        dummyListingData,
+        { headers: { "Content-Type": "application/json" } }
+      );
+      
+      if (response.data.status === "SUCCESS") {
+        const stoppedTasks = response.data.stopped_tasks || [];
+        alert(`Stopped all posting tasks (${stoppedTasks.length} tasks)`);
+        console.log("Stopped tasks:", stoppedTasks);
+        setTaskID([]);
+        setIsPosting(false);
+      } else {
+        throw new Error("Failed to stop posting tasks");
+      }
+    } catch (error) {
+      console.error("Error stopping posting tasks:", error);
+      alert("Error stopping the posting process: " + (error.response?.data?.detail || error.message));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleImport = async () => {
   setIsImporting(true);
@@ -442,31 +464,6 @@ console.log("Sel", selectedItems)
   }
 };
 
-  const handlePostingToggle = async () => {
-    setIsProcessing(true);
-    try {
-      if (!isPosting) {
-        // Start posting action
-        await startPosting();
-        setIsPosting(true);
-      } else {
-        // Stop posting action
-        await stopPosting();
-        setIsPosting(false);
-      }
-    } catch (error) {
-      console.error("Error toggling posting:", error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const startPosting = async () => {
-    // Simulate API call or actual posting logic
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    console.log("Started posting listings");
-  };
-
   const fetchBulkList = async () => {
     setLoading(true);
     setError("");
@@ -485,6 +482,20 @@ console.log("Sel", selectedItems)
     }
 
     setLoading(false);
+  };
+
+  const copyAllLinks = () => {
+    if (urls.length > 0) {
+      const allLinks = urls.join('\n');
+      navigator.clipboard.writeText(allLinks)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        })
+        .catch(() => {
+          setError("Failed to copy links. Please try again.");
+        });
+    }
   };
 
   const handleCheckListings = async () => {
@@ -560,26 +571,69 @@ console.log("Sel", selectedItems)
     }
   };
 
-  // Handle image preview
-  const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setPhotoFile(file);
+      await uploadToCloudinary();
+      console.log("uploadedImageUrl", uploadedImageUrl);
+
+      // Create a local preview for user feedback
       const reader = new FileReader();
       reader.onload = () => {
-        setPhotoPreview(reader.result as string);
+        if (reader.result) {
+          setPhotoPreview(reader.result as string);
+        }
       };
       reader.readAsDataURL(file);
-    }
-    if (!isCustomModalOpen) {
-      setPhotoPreview(null);
+      console.log("uploadedImageUrl", uploadedImageUrl);
     }
   };
+
+  const uploadToCloudinary = async () => {
+    if (!photoFile) {
+      alert("No image file selected!");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", photoFile);
+      
+      formData.append("upload_preset", "mcflipnew");
+
+      const cloudName = "dary9svzu"; 
+      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+
+      // Make the POST request to Cloudinary
+      const response = await fetch(cloudinaryUrl, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      console.log("123456789012345678901234567890", data)
+
+      if (data.secure_url) {
+        setUploadedImageUrl(data.secure_url);
+        alert("Image uploaded successfully to Cloudinary!");
+      } else {
+        console.error("Cloudinary upload error:", data);
+        alert("Failed to upload image to Cloudinary!");
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      alert("Upload failed. Check the console for details.");
+    } finally {
+      setIsUploading(false);
+    }
+  }
 
   const formattedCustomData: { listings: Listing[] } = {
     listings: [],
   };
 
-  const handleCustomListingSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleCustomListingSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsPostingCustom(true);
 
@@ -588,28 +642,28 @@ console.log("Sel", selectedItems)
     const formData = new FormData(event.currentTarget);
   
     const newListing: Listing = {
-      id: `custom-${Date.now()}`, // Unique ID for the custom listing
+      id: `custom-${Date.now()}`,
       kind: formData.get("kind") as string,
       description: formData.get("description") as string,
-      owner: "custom-owner", // You can set a default or retrieve it dynamically
+      owner: "custom-owner",
       category: formData.get("category") as string,
       name: formData.get("name") as string,
       price: parseFloat(formData.get("price") as string),
-      accept_currency: "USD", // Set a default or retrieve it dynamically
-      upc: "", // If not available, leave it empty
-      cognitoidp_client: "", // If not available, leave it empty
-      tags: tags, // Assuming 'tags' is a state variable holding tag values
+      accept_currency: "USD",
+      upc: "",
+      cognitoidp_client: "marketplace", 
+      tags: tags, 
       digital: formData.get("category")?.toString().includes("DIGITAL") ?? false,
       digital_deliverable: formData.get("category")?.toString().includes("DIGITAL") ? "true" : "false",
-      photo: photoPreview ? { view_url: photoPreview } : {}, // Use uploaded photo preview
-      shipping_fee: 0, // Set default value or allow user to input
+      photo: uploadedImageUrl ? { view_url: uploadedImageUrl } : {}, 
+      shipping_fee: parseFloat(formData.get("price") as string),
       shipping_paid_by: "buyer", // Default or user input
       shipping_within_days: parseInt(formData.get("shipping_within_days") as string, 10) || 3,
       expire_in_days: parseInt(formData.get("expire_in_days") as string, 10) || 7,
       visibility: "public", // Default value
-      image_urls: photoPreview || "", // Use uploaded photo preview
-      additional_images: photoPreview ? [photoPreview] : [],
-      cover_photo: photoPreview || "",
+      image_urls: uploadedImageUrl || "", // Use uploaded photo preview
+      additional_images: uploadedImageUrl ? [uploadedImageUrl] : [],
+      cover_photo: uploadedImageUrl || "",
     };
   
     console.log("New Listing Data:", newListing); // Debugging log
@@ -618,7 +672,8 @@ console.log("Sel", selectedItems)
     formattedCustomData.listings.push(newListing);
     console.log("Updated Listings:", formattedCustomData.listings); // Debugging log
 
-    handleCustomPostListing()
+    await handleCustomPostListing()
+    setIsCustomModalOpen(false);
   };
   
   const handleCustomPostListing = async () => {
@@ -778,7 +833,7 @@ console.log("Sel", selectedItems)
       id: selectedItem.id,
       price: parseFloat(priceInput),
     };
-    console.log("hygtfvcdu", pdatedListing)
+    console.log("hygtfvcdu", updatedListing)
   
     try {
       const allListingsRef = doc(db, "users", userID, "importedListings", "allListings");
@@ -875,29 +930,28 @@ console.log("Sel", selectedItems)
         <div className="space-y-4">
           <Card className="border-accent bg-card p-4">
             <div className="space-y-2">
-              <Button
+            <Button 
                 className={`w-full ${
                   isProcessing
                     ? "cursor-not-allowed bg-gray-500"
                     : isPosting
-                      ? "bg-destructive hover:bg-destructive/90"
+                      ? "cursor-not-allowed bg-gray-500"
                       : "bg-accent hover:bg-accent/90"
                 } text-accent-foreground`}
-                // onClick={handlePostingToggle}
                 onClick={handlePostListing}
-                disabled={isProcessing}
+                disabled={isProcessing || isPosting}
               >
                 {isProcessing
-                  ? "Processing Active..."
+                  ? "Starting Posting..."
                   : isPosting
-                    ? "Stop Posting"
-                    : "Post Listings"}
+                    ? "Posting Active..."
+                    : "Start Posting"}
               </Button>
               <Button
                 variant="destructive"
                 className="w-full"
                 onClick={handleStopPosting}
-                disabled={!isProcessing}
+                disabled={!isPosting}
               >
                 Stop Posting
               </Button>
@@ -1071,17 +1125,19 @@ console.log("Sel", selectedItems)
       </Dialog>
 
       <Dialog open={isBulkModalOpen} onOpenChange={setIsBulkModalOpen}>
-        <DialogContent className="">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Bulk URLs</DialogTitle>
           </DialogHeader>
-          {error && <p className="text-red-500 mt-2">{error}</p>}
-          <div className="max-h-1/2 overflow-auto ">
-                {urls.length > 0 && (
-              <ul className="mt-4">
+          
+          {error && <p className="text-red-500 mt-2 text-sm">{error}</p>}
+          
+          <div className="max-h-64 overflow-auto">
+            {urls.length > 0 && (
+              <ul className="mt-4 space-y-1">
                 {urls.map((url, index) => (
-                  <li key={index} className="mt-1 text-sm">
-                    <a href={url} target="_blank" rel="noopener noreferrer" className="underline text-xs">
+                  <li key={index} className="text-xs break-all">
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-500">
                       {url}
                     </a>
                   </li>
@@ -1089,19 +1145,47 @@ console.log("Sel", selectedItems)
               </ul>
             )}
           </div>
-          <DialogFooter>
+          
+          <DialogFooter className="flex items-center justify-between sm:justify-between flex-row">
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setIsBulkModalOpen(false)}
+                variant="outline"
+                size="sm"
+              >
+                Close
+              </Button>
+              
+              {urls.length > 0 && (
+                <Button
+                  onClick={copyAllLinks}
+                  variant="secondary"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  disabled={copied}
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" />
+                      Copy All
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+            
             <Button
-              onClick={() => setIsBulkModalOpen(false)}
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-            onClick={fetchBulkList}
-            disabled={loading}
+              onClick={fetchBulkList}
+              disabled={loading}
+              size="sm"
               className={loading ? "bg-primary/70" : ""}
             >
-              {loading ? "Loading..." : "Get Bulk List"}
+              {loading ? "Loading..." : "Get Links"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1217,6 +1301,11 @@ console.log("Sel", selectedItems)
             <div className="mb-4">
               <label htmlFor="custom-price" className="block font-medium text-white/60">Price:</label>
               <Input type="number" id="custom-price" name="price" step="0.01" required  />
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="custom-delivery-price" className="block font-medium text-white/60">Shipping fee:</label>
+              <Input type="number" id="custom-delivery-price" name="shipping_fee" step="0.01" defaultValue={"0"}  />
             </div>
 
             <div className="mb-4">

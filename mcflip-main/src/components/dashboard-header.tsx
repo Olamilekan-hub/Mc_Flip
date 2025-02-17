@@ -19,14 +19,14 @@ export default function DashboardHeader() {
                     Posting
                 </Button>
             </Link>
-            <Link href="/dashboard/delete" className="flex-1">
+            {/* <Link href="/dashboard/delete" className="flex-1">
                 <Button 
                     variant="outline" 
                     className={`w-full ${pathname === "/dashboard/delete" ? "bg-accent text-accent-foreground" : ""}`}
                 >
                     Delete Listings
                 </Button>
-            </Link>
+            </Link> */}
             <Link href="/dashboard/settings" className="flex-1">
                 <Button 
                     variant="outline" 

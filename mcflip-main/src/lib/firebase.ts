@@ -3,6 +3,7 @@
 // Import Firebase modules for authentication and Firestore database
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 import { getFirestore, doc, setDoc, query, where, getDocs, CollectionReference, collection } from "firebase/firestore";
 
 // Firebase configuration object, using environment variables for security
@@ -15,12 +16,11 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase app
 const app = initializeApp(firebaseConfig);
-// Initialize Firebase Authentication
 export const auth = getAuth(app);
-// Initialize Firestore database
 export const db = getFirestore(app);
+export const storage = getStorage(app);
+// export const docs = doc(app)
 
 // Reference to users collection in Firestore
 type UserData = { username: string; email: string; createdAt: Date };
