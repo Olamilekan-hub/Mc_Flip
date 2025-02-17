@@ -656,11 +656,11 @@ console.log("Sel", selectedItems)
       digital: formData.get("category")?.toString().includes("DIGITAL") ?? false,
       digital_deliverable: formData.get("category")?.toString().includes("DIGITAL") ? "true" : "false",
       photo: uploadedImageUrl ? { view_url: uploadedImageUrl } : {}, 
-      shipping_fee: parseFloat(formData.get("price") as string),
-      shipping_paid_by: "buyer", // Default or user input
+      shipping_fee: parseFloat(formData.get("shipping_fee") as string),
+      shipping_paid_by: formData.get("shipping_paid_by") as string,
       shipping_within_days: parseInt(formData.get("shipping_within_days") as string, 10) || 3,
       expire_in_days: parseInt(formData.get("expire_in_days") as string, 10) || 7,
-      visibility: "public", // Default value
+      visibility: formData.get("visibility") as string,
       image_urls: uploadedImageUrl || "", // Use uploaded photo preview
       additional_images: uploadedImageUrl ? [uploadedImageUrl] : [],
       cover_photo: uploadedImageUrl || "",
@@ -1325,6 +1325,32 @@ console.log("Sel", selectedItems)
             </div>
 
             {/* Dropdowns */}
+            <div className="mb-4">
+              <label htmlFor="custom_shipping_paid_by" className="block font-medium text-white/60">Shipping Paid by:</label>
+              <Select id="custom_shipping_paid_by" name="shipping_paid_by" required >
+                <SelectTrigger>
+                <SelectValue placeholder="Shipping Paid by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="buyer">Buyer</SelectItem>
+                <SelectItem  value="seller">Seller</SelectItem>
+              </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="mb-4">
+              <label htmlFor="custom_visibility" className="block font-medium text-white/60">Visibility:</label>
+              <Select id="custom_visibility" name="visibility" required >
+                <SelectTrigger>
+                <SelectValue placeholder="Visibility" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="public">Public</SelectItem>
+                <SelectItem  value="private">Private</SelectItem>
+              </SelectContent>
+              </Select>
+            </div>
+
             <div className="mb-4">
               <label htmlFor="custom-category" className="block font-medium text-white/60">Category:</label>
               <Select id="custom-category" name="category" required >
