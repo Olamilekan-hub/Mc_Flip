@@ -1,33 +1,442 @@
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from pydantic import BaseModel, Field
+# from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
+# from pydantic import BaseModel
+# from typing import List, Optional, Dict, Any
+# import aiohttp
+# import asyncio
+# import pyotp
+# import json
+# import logging
+# import os
+# import random
+# from datetime import datetime
+
+# # Set up logging
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# router = APIRouter()
+
+# # Global stop flag for all tasks
+# GLOBAL_STOP_FLAG = False
+
+# # Store active posting tasks with their state
+# active_tasks: Dict[str, Any] = {}
+
+# class PhotoData(BaseModel):
+#     url: str
+#     status: str = "active"
+#     display_order: Optional[int] = None
+
+# class ListingRequest(BaseModel):
+#     kind: str
+#     owner: str
+#     status: str = "draft"
+#     name: str
+#     description: str
+#     category: str
+#     platform: str
+#     upc: str
+#     price: int
+#     accept_currency: str
+#     shipping_within_days: int
+#     expire_in_days: int
+#     shipping_fee: int = 0
+#     shipping_paid_by: str
+#     shipping_predefined_package: str
+#     cognitoidp_client: str
+#     tags: List[str]
+#     digital: bool
+#     digital_region: str
+#     digital_deliverable: str
+#     visibility: str
+#     image_url: Optional[str] = None
+#     additional_images: Optional[List[str]] = None
+
+# class ListingState:
+#     def __init__(self, task_id: str):
+#         self.task_id = task_id
+#         self.is_active = True
+#         self.start_time = datetime.now()
+#         self.last_post_time = None
+#         self.total_posts = 0
+#         self.errors = 0
+
+# def get_auth_headers(api_key: str, api_secret: str, content_type="application/json") -> Dict[str, str]:
+#     """
+#     Generate authentication headers with a TOTP 
+#     based on user-provided API Key and Secret.
+#     """
+#     totp = pyotp.TOTP(api_secret)
+#     return {
+#         "Authorization": f"GFAPI {api_key}:{totp.now()}",
+#         "Content-Type": content_type
+#     }
+
+# async def api_request(session, method, endpoint, api_key, api_secret, data=None, retries=3):
+#     """
+#     Make an API request with retry logic, generating fresh TOTP each time.
+#     """
+#     BASE_URL = os.getenv("BASE_URL", "https://production-gameflip.fingershock.com/api/v1")
+#     url = BASE_URL + endpoint
+#     content_type = "application/json-patch+json" if method.upper() == 'PATCH' else "application/json"
+
+#     for attempt in range(retries):
+#         headers = get_auth_headers(api_key, api_secret, content_type)
+#         try:
+#             async with getattr(session, method.lower())(url, headers=headers, json=data) as response:
+#                 response_data = await response.json()
+
+#                 if response.status == 200:
+#                     return response_data
+#                 elif response_data.get('error', {}).get('message') == 'Invalid api otp':
+#                     logging.warning(f"Invalid OTP. Attempt {attempt+1}/{retries}")
+#                     await asyncio.sleep(1)
+#                 else:
+#                     logging.error(f"API request failed: {response_data}")
+#                     raise HTTPException(
+#                         status_code=response.status,
+#                         detail=response_data.get('error', {}).get('message', 'Unknown error')
+#                     )
+#         except Exception as e:
+#             logging.error(f"Request error: {str(e)}")
+#             if attempt == retries - 1:
+#                 raise HTTPException(status_code=500, detail=str(e))
+#             await asyncio.sleep(1)
+
+#     raise HTTPException(status_code=500, detail="Maximum retries reached")
+
+# async def upload_photo(session, listing_id: str, photo_data: PhotoData, api_key: str, api_secret: str):
+#     """Upload a photo to a listing with improved error handling."""
+#     try:
+#         # 1) Request an upload URL
+#         photo_response = await api_request(
+#             session, 
+#             'POST',
+#             f'/listing/{listing_id}/photo',
+#             api_key,
+#             api_secret
+#         )
+#         if not photo_response or photo_response.get('status') != 'SUCCESS':
+#             logging.error(f"Failed to get photo upload URL: {photo_response}")
+#             return None
+
+#         upload_url = photo_response.get('data', {}).get('upload_url')
+#         photo_id   = photo_response.get('data', {}).get('id')
+#         if not upload_url or not photo_id:
+#             logging.error("Missing upload URL or photo ID")
+#             return None
+
+#         # 2) Download the image
+#         async with session.get(photo_data.url) as img_response:
+#             if img_response.status != 200:
+#                 logging.error(f"Failed to download image from URL: {photo_data.url}")
+#                 return None
+#             image_data = await img_response.read()
+
+#         # 3) PUT the image data to the upload_url
+#         async with session.put(upload_url, data=image_data) as upload_response:
+#             if upload_response.status != 200:
+#                 logging.error(f"Failed to upload image to storage: {upload_response.status}")
+#                 return None
+
+#         # 4) Update photo status and display order
+#         patch_ops = []
+#         if photo_data.status:
+#             patch_ops.append({
+#                 "op": "replace",
+#                 "path": f"/photo/{photo_id}/status",
+#                 "value": photo_data.status
+#             })
+#         if photo_data.display_order is not None:
+#             patch_ops.append({
+#                 "op": "replace",
+#                 "path": f"/photo/{photo_id}/display_order",
+#                 "value": photo_data.display_order
+#             })
+
+#         if patch_ops:
+#             patch_response = await api_request(
+#                 session,
+#                 'PATCH',
+#                 f'/listing/{listing_id}',
+#                 api_key,
+#                 api_secret,
+#                 data=patch_ops
+#             )
+#             if not patch_response or patch_response.get('status') != 'SUCCESS':
+#                 logging.error("Failed to update photo metadata")
+#                 return None
+
+#         return photo_id
+#     except Exception as e:
+#         logging.error(f"Error in upload_photo: {str(e)}")
+#         return None
+
+# async def set_cover_photo(session, listing_id: str, photo_id: str, api_key: str, api_secret: str):
+#     """Set the cover photo for a listing."""
+#     try:
+#         patch_ops = [{
+#             "op": "replace",
+#             "path": "/cover_photo",
+#             "value": photo_id
+#         }]
+#         patch_response = await api_request(
+#             session,
+#             'PATCH',
+#             f'/listing/{listing_id}',
+#             api_key,
+#             api_secret,
+#             data=patch_ops
+#         )
+#         return patch_response and patch_response.get('status') == 'SUCCESS'
+#     except Exception as e:
+#         logging.error(f"Error setting cover photo: {str(e)}")
+#         return False
+
+# async def update_listing_status(session, listing_id: str, status: str, api_key: str, api_secret: str):
+#     """Update listing status (e.g. to 'onsale')."""
+#     try:
+#         patch_ops = [{
+#             "op": "replace",
+#             "path": "/status",
+#             "value": status
+#         }]
+#         patch_response = await api_request(
+#             session,
+#             'PATCH',
+#             f'/listing/{listing_id}',
+#             api_key,
+#             api_secret,
+#             data=patch_ops
+#         )
+#         return patch_response and patch_response.get('status') == 'SUCCESS'
+#     except Exception as e:
+#         logging.error(f"Error updating listing status: {str(e)}")
+#         return False
+
+# async def continuous_posting(
+#     listing_data: ListingRequest,
+#     task_id: str,
+#     state: ListingState,
+#     api_key: str,
+#     api_secret: str,
+#     time_between_listings: int
+# ):
+#     """
+#     Background task to continuously post listings.
+#     Uses the user-provided time_between_listings for the sleep duration.
+#     """
+#     global GLOBAL_STOP_FLAG
+
+#     try:
+#         while state.is_active and not GLOBAL_STOP_FLAG:
+#             try:
+#                 async with aiohttp.ClientSession() as session:
+#                     # Step 1: Create listing in draft status
+#                     initial_listing = listing_data.dict(exclude={'image_url', 'additional_images'})
+#                     initial_response = await api_request(
+#                         session,
+#                         'POST',
+#                         '/listing',
+#                         api_key,
+#                         api_secret,
+#                         data=initial_listing
+#                     )
+#                     if not initial_response or initial_response.get('status') != 'SUCCESS':
+#                         state.errors += 1
+#                         logging.error(f"Failed to create listing for task {task_id}")
+#                         await asyncio.sleep(time_between_listings)
+#                         continue
+
+#                     listing_id = initial_response['data']['id']
+#                     main_photo_id = None
+
+#                     # Step 2: Upload main image
+#                     if listing_data.image_url:
+#                         photo_data = PhotoData(
+#                             url=listing_data.image_url,
+#                             status="active",
+#                             display_order=0
+#                         )
+#                         main_photo_id = await upload_photo(session, listing_id, photo_data, api_key, api_secret)
+#                         if not main_photo_id:
+#                             state.errors += 1
+#                             logging.warning(f"Failed to upload main photo for task {task_id}")
+#                         else:
+#                             cover_success = await set_cover_photo(session, listing_id, main_photo_id, api_key, api_secret)
+#                             if not cover_success:
+#                                 state.errors += 1
+#                                 logging.warning(f"Failed to set cover photo for task {task_id}")
+
+#                     # Step 3: Upload additional images
+#                     if listing_data.additional_images:
+#                         for index, img_url in enumerate(listing_data.additional_images, start=1):
+#                             photo_data = PhotoData(
+#                                 url=img_url,
+#                                 status="active",
+#                                 display_order=index
+#                             )
+#                             success_photo = await upload_photo(session, listing_id, photo_data, api_key, api_secret)
+#                             if not success_photo:
+#                                 state.errors += 1
+#                                 logging.warning(f"Failed to upload additional image {index} for task {task_id}")
+
+#                     # Step 4: Update listing status to onsale
+#                     success_status = await update_listing_status(session, listing_id, "onsale", api_key, api_secret)
+#                     if not success_status:
+#                         state.errors += 1
+#                         logging.warning(f"Failed to update listing status for task {task_id}")
+#                     else:
+#                         state.total_posts += 1
+#                         state.last_post_time = datetime.now()
+#                         logging.info(f"Successfully created listing {listing_id} for task {task_id}")
+
+#                     # Wait the user-specified number of seconds before next listing
+#                     await asyncio.sleep(time_between_listings)
+
+#             except Exception as e:
+#                 state.errors += 1
+#                 logging.error(f"Error in continuous posting for task {task_id}: {str(e)}")
+#                 await asyncio.sleep(time_between_listings)
+
+#     finally:
+#         if task_id in active_tasks:
+#             del active_tasks[task_id]
+#         logging.info(
+#             f"Continuous posting task {task_id} ended. "
+#             f"Total posts: {state.total_posts}, Errors: {state.errors}"
+#         )
+
+# @router.post("/post-listing-with-image")
+# async def post_listing_with_image(
+#     request: Request,
+#     background_tasks: BackgroundTasks,
+#     task_id: Optional[str] = None,
+#     stop: Optional[bool] = False,
+#     global_stop: Optional[bool] = False
+# ):
+#     """
+#     Creates listings continuously with images on Gameflip until stopped.
+#     Expects:
+#     - listing_data fields (ListingRequest)
+#     - api_key
+#     - api_secret
+#     - time_between_listings
+#     """
+#     global GLOBAL_STOP_FLAG
+
+#     # Parse body for user-provided fields
+#     body = await request.json()
+#     api_key = body.get("api_key")
+#     api_secret = body.get("api_secret")
+#     time_between_listings = int(body.get("time_between_listings", 60))  # fallback to 60s if not provided
+
+#     if global_stop:
+#         # Stop ALL tasks
+#         GLOBAL_STOP_FLAG = True
+#         stopped_tasks = list(active_tasks.keys())
+#         active_tasks.clear()
+#         return {
+#             "message": "Stopping all listing creation tasks",
+#             "status": "SUCCESS",
+#             "stopped_tasks": stopped_tasks
+#         }
+
+#     # Reset global flag in case it was set before
+#     GLOBAL_STOP_FLAG = False
+
+#     # If we're just stopping one specific task
+#     if stop:
+#         if not task_id:
+#             raise HTTPException(status_code=400, detail="No task_id provided for stopping a specific task.")
+#         if task_id not in active_tasks:
+#             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+#         state = active_tasks[task_id]
+#         state.is_active = False
+#         return {
+#             "message": f"Stopping continuous listing creation for task {task_id}",
+#             "status": "SUCCESS",
+#             "total_posts": state.total_posts,
+#             "errors": state.errors,
+#             "duration": str(datetime.now() - state.start_time)
+#         }
+
+#     # Create a ListingRequest from the body (minus the credentials/time)
+#     try:
+#         # We remove keys that are not part of ListingRequest
+#         # so we can parse the rest with ListingRequest(**fields)
+#         listing_fields = {
+#             k: v
+#             for k, v in body.items()
+#             if k not in (
+#                 "api_key",
+#                 "api_secret",
+#                 "time_between_listings",
+#                 "stop",
+#                 "global_stop",
+#                 "task_id"
+#             )
+#         }
+#         listing_data = ListingRequest(**listing_fields)
+#     except Exception as exc:
+#         raise HTTPException(status_code=422, detail=f"Invalid listing data: {str(exc)}")
+
+#     # Create a new background task for continuous posting
+#     if not task_id:
+#         task_id = f"task_{len(active_tasks) + 1}_{int(datetime.now().timestamp())}"
+
+#     if task_id in active_tasks:
+#         raise HTTPException(status_code=400, detail=f"Task {task_id} is already running")
+
+#     state = ListingState(task_id)
+#     active_tasks[task_id] = state
+#     background_tasks.add_task(
+#         continuous_posting,
+#         listing_data,
+#         task_id,
+#         state,
+#         api_key,
+#         api_secret,
+#         time_between_listings
+#     )
+
+#     return {
+#         "message": "Started continuous listing creation",
+#         "status": "SUCCESS",
+#         "task_id": task_id
+#     }
+
+# @router.get("/listing-tasks")
+# async def get_listing_tasks():
+#     """Get status of all active listing tasks."""
+#     return {
+#         task_id: {
+#             "active": s.is_active,
+#             "total_posts": s.total_posts,
+#             "errors": s.errors,
+#             "start_time": s.start_time.isoformat(),
+#             "last_post_time": s.last_post_time.isoformat() if s.last_post_time else None,
+#             "duration": str(datetime.now() - s.start_time)
+#         }
+#         for task_id, s in active_tasks.items()
+#     }
+
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
+from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import aiohttp
 import asyncio
 import pyotp
-import json
 import logging
 import os
-import random
 from datetime import datetime
-from dotenv import load_dotenv
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Initialize router and environment
 router = APIRouter()
-load_dotenv()
-BASE_URL = os.getenv("BASE_URL")
-API_KEY = os.getenv("API_KEY")
-API_SECRET = os.getenv("API_SECRET")
-totp = pyotp.TOTP(API_SECRET)
 
-# Global stop flag for all tasks
-GLOBAL_STOP_FLAG = False
-
-# Store active posting tasks with their state
-active_tasks: Dict[str, Any] = {}
-
+# -------------------------------
+# Define Models and Classes First
+# -------------------------------
 class PhotoData(BaseModel):
     url: str
     status: str = "active"
@@ -42,7 +451,7 @@ class ListingRequest(BaseModel):
     category: str
     platform: str
     upc: str
-    price: int
+    price: float
     accept_currency: str
     shipping_within_days: int
     expire_in_days: int
@@ -67,28 +476,48 @@ class ListingState:
         self.total_posts = 0
         self.errors = 0
 
-def get_auth_headers(content_type="application/json"):
-    """Generate authentication headers with current TOTP"""
+# -------------------------------
+# Global Variables (after models)
+# -------------------------------
+GLOBAL_STOP_FLAG = False
+
+# Global batch storage for listing requests submitted from the frontend.
+listing_batch: List[ListingRequest] = []  # Holds all listing requests submitted
+global_batch_state: Optional[ListingState] = None
+global_batch_task_running: bool = False
+
+# Store active posting tasks (for status reporting)
+active_tasks: Dict[str, Any] = {}
+
+# -------------------------------
+# Helper Functions
+# -------------------------------
+def get_auth_headers(api_key: str, api_secret: str, content_type="application/json") -> Dict[str, str]:
+    """
+    Generate authentication headers with a TOTP based on user-provided API Key and Secret.
+    """
+    totp = pyotp.TOTP(api_secret)
     return {
-        "Authorization": f"GFAPI {API_KEY}:{totp.now()}",
+        "Authorization": f"GFAPI {api_key}:{totp.now()}",
         "Content-Type": content_type
     }
 
-async def api_request(session, method, endpoint, data=None, retries=3):
-    """Make an API request with retry logic"""
+async def api_request(session, method, endpoint, api_key, api_secret, data=None, retries=3):
+    """
+    Make an API request with retry logic, generating a fresh TOTP each time.
+    """
+    BASE_URL = os.getenv("BASE_URL", "https://production-gameflip.fingershock.com/api/v1")
     url = BASE_URL + endpoint
     content_type = "application/json-patch+json" if method.upper() == 'PATCH' else "application/json"
-    
     for attempt in range(retries):
-        headers = get_auth_headers(content_type)
+        headers = get_auth_headers(api_key, api_secret, content_type)
         try:
             async with getattr(session, method.lower())(url, headers=headers, json=data) as response:
                 response_data = await response.json()
-                
                 if response.status == 200:
                     return response_data
                 elif response_data.get('error', {}).get('message') == 'Invalid api otp':
-                    logging.warning(f"Invalid OTP. Attempt {attempt + 1}/{retries}")
+                    logging.warning(f"Invalid OTP. Attempt {attempt+1}/{retries}")
                     await asyncio.sleep(1)
                 else:
                     logging.error(f"API request failed: {response_data}")
@@ -96,51 +525,38 @@ async def api_request(session, method, endpoint, data=None, retries=3):
                         status_code=response.status,
                         detail=response_data.get('error', {}).get('message', 'Unknown error')
                     )
-                    
         except Exception as e:
             logging.error(f"Request error: {str(e)}")
             if attempt == retries - 1:
                 raise HTTPException(status_code=500, detail=str(e))
             await asyncio.sleep(1)
-    
     raise HTTPException(status_code=500, detail="Maximum retries reached")
 
-async def upload_photo(session, listing_id: str, photo_data: PhotoData):
-    """Upload a photo to a listing with improved error handling"""
+async def upload_photo(session, listing_id: str, photo_data: PhotoData, api_key: str, api_secret: str):
+    """Upload a photo to a listing with improved error handling."""
     try:
-        # First get the upload URL
-        photo_response = await api_request(
-            session,
-            'POST',
-            f'/listing/{listing_id}/photo'
-        )
-        
+        # 1) Request an upload URL
+        photo_response = await api_request(session, 'POST', f'/listing/{listing_id}/photo', api_key, api_secret)
         if not photo_response or photo_response.get('status') != 'SUCCESS':
             logging.error(f"Failed to get photo upload URL: {photo_response}")
             return None
-            
         upload_url = photo_response.get('data', {}).get('upload_url')
-        photo_id = photo_response.get('data', {}).get('id')
-        
+        photo_id   = photo_response.get('data', {}).get('id')
         if not upload_url or not photo_id:
             logging.error("Missing upload URL or photo ID")
             return None
-
-        # Download the image from the provided URL
+        # 2) Download the image
         async with session.get(photo_data.url) as img_response:
             if img_response.status != 200:
                 logging.error(f"Failed to download image from URL: {photo_data.url}")
                 return None
-            
             image_data = await img_response.read()
-
-        # Upload the image to Gameflip's storage
+        # 3) PUT the image data to the upload_url
         async with session.put(upload_url, data=image_data) as upload_response:
             if upload_response.status != 200:
                 logging.error(f"Failed to upload image to storage: {upload_response.status}")
                 return None
-
-        # Update photo status and display order
+        # 4) Update photo status and display order
         patch_ops = []
         if photo_data.status:
             patch_ops.append({
@@ -148,229 +564,205 @@ async def upload_photo(session, listing_id: str, photo_data: PhotoData):
                 "path": f"/photo/{photo_id}/status",
                 "value": photo_data.status
             })
-        
         if photo_data.display_order is not None:
             patch_ops.append({
                 "op": "replace",
                 "path": f"/photo/{photo_id}/display_order",
                 "value": photo_data.display_order
             })
-        
         if patch_ops:
-            patch_response = await api_request(
-                session,
-                'PATCH',
-                f'/listing/{listing_id}',
-                data=patch_ops
-            )
-            
+            patch_response = await api_request(session, 'PATCH', f'/listing/{listing_id}', api_key, api_secret, data=patch_ops)
             if not patch_response or patch_response.get('status') != 'SUCCESS':
                 logging.error("Failed to update photo metadata")
                 return None
-            
         return photo_id
-        
     except Exception as e:
         logging.error(f"Error in upload_photo: {str(e)}")
         return None
 
-async def set_cover_photo(session, listing_id: str, photo_id: str):
-    """Set the cover photo for a listing"""
+async def set_cover_photo(session, listing_id: str, photo_id: str, api_key: str, api_secret: str):
+    """Set the cover photo for a listing."""
     try:
         patch_ops = [{
             "op": "replace",
             "path": "/cover_photo",
             "value": photo_id
         }]
-        
-        patch_response = await api_request(
-            session,
-            'PATCH',
-            f'/listing/{listing_id}',
-            data=patch_ops
-        )
+        patch_response = await api_request(session, 'PATCH', f'/listing/{listing_id}', api_key, api_secret, data=patch_ops)
         return patch_response and patch_response.get('status') == 'SUCCESS'
     except Exception as e:
         logging.error(f"Error setting cover photo: {str(e)}")
         return False
 
-async def update_listing_status(session, listing_id: str, status: str = "onsale"):
-    """Update listing status"""
+async def update_listing_status(session, listing_id: str, status: str, api_key: str, api_secret: str):
+    """Update listing status (e.g. to 'onsale')."""
     try:
         patch_ops = [{
             "op": "replace",
             "path": "/status",
             "value": status
         }]
-        
-        patch_response = await api_request(
-            session,
-            'PATCH',
-            f'/listing/{listing_id}',
-            data=patch_ops
-        )
+        patch_response = await api_request(session, 'PATCH', f'/listing/{listing_id}', api_key, api_secret, data=patch_ops)
         return patch_response and patch_response.get('status') == 'SUCCESS'
     except Exception as e:
         logging.error(f"Error updating listing status: {str(e)}")
         return False
 
-async def continuous_posting(listing_data: ListingRequest, task_id: str, state: ListingState):
-    """Background task to continuously post listings with improved state management"""
-    global GLOBAL_STOP_FLAG
-    
-    try:
-        while state.is_active and not GLOBAL_STOP_FLAG:
+# -------------------------------
+# Continuous Batch Posting Function
+# -------------------------------
+async def continuous_posting_batch(api_key: str, api_secret: str, time_between_listings: int):
+    """
+    Continuously cycles through the global listing batch and posts each listing one at a time.
+    After finishing the batch, it starts over until stopped.
+    """
+    global GLOBAL_STOP_FLAG, listing_batch, global_batch_state, global_batch_task_running
+    if global_batch_state is None:
+        global_batch_state = ListingState(task_id="global_batch")
+    while global_batch_state.is_active and not GLOBAL_STOP_FLAG:
+        if not listing_batch:
+            # No listings yet—wait briefly.
+            await asyncio.sleep(1)
+            continue
+        # Iterate over a snapshot of the current batch
+        current_batch = list(listing_batch)
+        for listing_data in current_batch:
+            if not global_batch_state.is_active or GLOBAL_STOP_FLAG:
+                break
             try:
                 async with aiohttp.ClientSession() as session:
-                    # Step 1: Create initial listing in draft status
-                    initial_listing = listing_data.dict(
-                        exclude={'image_url', 'additional_images'}
-                    )
-                    
-                    initial_response = await api_request(
-                        session,
-                        'POST',
-                        '/listing',
-                        data=initial_listing
-                    )
-                    
+                    # Create listing in draft status
+                    initial_listing = listing_data.dict(exclude={'image_url', 'additional_images'})
+                    initial_response = await api_request(session, 'POST', '/listing', api_key, api_secret, data=initial_listing)
                     if not initial_response or initial_response.get('status') != 'SUCCESS':
-                        state.errors += 1
-                        logging.error(f"Failed to create listing for task {task_id}")
-                        await asyncio.sleep(60)
+                        global_batch_state.errors += 1
+                        logging.error("Failed to create listing in batch")
+                        await asyncio.sleep(time_between_listings)
                         continue
-                        
                     listing_id = initial_response['data']['id']
                     main_photo_id = None
-
-                    # Step 2: Upload main image if provided
+                    # Upload main image if provided
                     if listing_data.image_url:
-                        photo_data = PhotoData(
-                            url=listing_data.image_url,
-                            status="active",
-                            display_order=0
-                        )
-                        main_photo_id = await upload_photo(session, listing_id, photo_data)
-                        
+                        photo_data = PhotoData(url=listing_data.image_url, status="active", display_order=0)
+                        main_photo_id = await upload_photo(session, listing_id, photo_data, api_key, api_secret)
                         if not main_photo_id:
-                            state.errors += 1
-                            logging.warning(f"Failed to upload main photo for task {task_id}")
+                            global_batch_state.errors += 1
+                            logging.warning("Failed to upload main photo in batch")
                         else:
-                            # Set cover photo while still in draft status
-                            cover_success = await set_cover_photo(session, listing_id, main_photo_id)
+                            cover_success = await set_cover_photo(session, listing_id, main_photo_id, api_key, api_secret)
                             if not cover_success:
-                                state.errors += 1
-                                logging.warning(f"Failed to set cover photo for task {task_id}")
-
-                    # Step 3: Upload additional images if provided
+                                global_batch_state.errors += 1
+                                logging.warning("Failed to set cover photo in batch")
+                    # Upload additional images if any
                     if listing_data.additional_images:
-                        for index, image_url in enumerate(listing_data.additional_images, start=1):
-                            photo_data = PhotoData(
-                                url=image_url,
-                                status="active",
-                                display_order=index
-                            )
-                            if not await upload_photo(session, listing_id, photo_data):
-                                state.errors += 1
-                                logging.warning(f"Failed to upload additional image {index} for task {task_id}")
-
-                    # Step 4: Update listing status to onsale after all photos are handled
-                    success = await update_listing_status(session, listing_id, "onsale")
-                    
-                    if not success:
-                        state.errors += 1
-                        logging.warning(f"Failed to update listing status for task {task_id}")
+                        for index, img_url in enumerate(listing_data.additional_images, start=1):
+                            photo_data = PhotoData(url=img_url, status="active", display_order=index)
+                            success_photo = await upload_photo(session, listing_id, photo_data, api_key, api_secret)
+                            if not success_photo:
+                                global_batch_state.errors += 1
+                                logging.warning(f"Failed to upload additional image {index} in batch")
+                    # Update status to onsale
+                    success_status = await update_listing_status(session, listing_id, "onsale", api_key, api_secret)
+                    if not success_status:
+                        global_batch_state.errors += 1
+                        logging.warning("Failed to update listing status in batch")
                     else:
-                        state.total_posts += 1
-                        state.last_post_time = datetime.now()
-                        logging.info(f"Successfully created listing {listing_id} for task {task_id}")
-                    
-                    # Wait for 3 seconds before next iteration
-                    await asyncio.sleep(60)
-                    
+                        global_batch_state.total_posts += 1
+                        global_batch_state.last_post_time = datetime.now()
+                        logging.info(f"Successfully created listing {listing_id} in batch")
+                    # Wait the specified delay before posting the next listing
+                    await asyncio.sleep(time_between_listings)
             except Exception as e:
-                state.errors += 1
-                logging.error(f"Error in continuous posting for task {task_id}: {str(e)}")
-                await asyncio.sleep(60)
-                
-    finally:
-        # Cleanup when the task ends
-        if task_id in active_tasks:
-            del active_tasks[task_id]
-        logging.info(f"Continuous posting task {task_id} ended. Total posts: {state.total_posts}, Errors: {state.errors}")
+                global_batch_state.errors += 1
+                logging.error(f"Error in batch posting: {str(e)}")
+                await asyncio.sleep(time_between_listings)
+    # When stopping, clean up the global task state
+    global_batch_task_running = False
+    global_batch_state = None
 
+# -------------------------------
+# Endpoint: Post Listing with Image
+# -------------------------------
 @router.post("/post-listing-with-image")
 async def post_listing_with_image(
-    listing_data: ListingRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
-    task_id: Optional[str] = None,
     stop: Optional[bool] = False,
     global_stop: Optional[bool] = False
 ):
-    """Creates listings continuously with images on Gameflip until stopped"""
-    global GLOBAL_STOP_FLAG
-    
-    # Global stop mechanism
+    """
+    Accepts a single listing (with API credentials and time_between_listings) as sent by the frontend.
+    The listing is added to a global batch; a background task will post listings one at a time in sequence.
+    To stop all posting, send global_stop=true.
+    """
+    global GLOBAL_STOP_FLAG, listing_batch, global_batch_task_running, global_batch_state
+
+    body = await request.json()
+    api_key = body.get("api_key")
+    api_secret = body.get("api_secret")
+    time_between_listings = int(body.get("time_between_listings", 60))
+
     if global_stop:
         GLOBAL_STOP_FLAG = True
-        stopped_tasks = list(active_tasks.keys())
+        listing_batch.clear()
+        if global_batch_state:
+            global_batch_state.is_active = False
         active_tasks.clear()
         return {
             "message": "Stopping all listing creation tasks",
             "status": "SUCCESS",
-            "stopped_tasks": stopped_tasks
+            "stopped_tasks": ["global_batch"]
         }
-    
-    # Reset global stop flag if it was previously set
-    GLOBAL_STOP_FLAG = False
-    
-    # Generate a task ID if not provided
-    if not task_id:
-        task_id = f"task_{len(active_tasks) + 1}_{int(datetime.now().timestamp())}"
-    
-    # Handle stop request for a specific task
+
     if stop:
-        if task_id in active_tasks:
-            state = active_tasks[task_id]
-            state.is_active = False
-            return {
-                "message": f"Stopping continuous listing creation for task {task_id}",
-                "status": "SUCCESS",
-                "total_posts": state.total_posts,
-                "errors": state.errors,
-                "duration": str(datetime.now() - state.start_time)
-            }
-        else:
-            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-    
-    # Check if task already exists
-    if task_id in active_tasks:
-        raise HTTPException(status_code=400, detail=f"Task {task_id} is already running")
-    
-    # Create new state for this task
-    state = ListingState(task_id)
-    active_tasks[task_id] = state
-    
-    # Start continuous posting in the background
-    background_tasks.add_task(continuous_posting, listing_data, task_id, state)
-    
-    return {
-        "message": "Started continuous listing creation",
-        "status": "SUCCESS",
-        "task_id": task_id
-    }
+        # In global batch mode, individual stop is not supported.
+        raise HTTPException(status_code=400, detail="Individual stop not supported in global batch mode. Use global_stop.")
+
+    # Reset the global stop flag when starting a new batch
+    if GLOBAL_STOP_FLAG:
+        GLOBAL_STOP_FLAG = False
+        logging.info("GLOBAL_STOP_FLAG reset to False to allow new postings.")
+
+    # Build a ListingRequest from the body (exclude credentials and timing)
+    try:
+        listing_fields = {k: v for k, v in body.items() if k not in ("api_key", "api_secret", "time_between_listings")}
+        listing_data = ListingRequest(**listing_fields)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid listing data: {str(exc)}")
+
+    # Add the listing to the global batch
+    listing_batch.append(listing_data)
+    logging.info(f"Added new listing to batch. Total listings in batch: {len(listing_batch)}")
+
+    # If no global batch task is running, start it
+    if not global_batch_task_running:
+        global_batch_task_running = True
+        global_batch_state = ListingState(task_id="global_batch")
+        active_tasks["global_batch"] = global_batch_state
+        background_tasks.add_task(continuous_posting_batch, api_key, api_secret, time_between_listings)
+        return {
+            "message": "Started global batch posting task and added listing to batch",
+            "status": "SUCCESS",
+            "task_id": "global_batch"
+        }
+    else:
+        return {
+            "message": "Added listing to existing global batch",
+            "status": "SUCCESS",
+            "task_id": "global_batch"
+        }
 
 @router.get("/listing-tasks")
 async def get_listing_tasks():
-    """Get status of all active listing tasks"""
+    """Get status of the global batch posting task."""
     return {
         task_id: {
-            "active": state.is_active,
-            "total_posts": state.total_posts,
-            "errors": state.errors,
-            "start_time": state.start_time.isoformat(),
-            "last_post_time": state.last_post_time.isoformat() if state.last_post_time else None,
-            "duration": str(datetime.now() - state.start_time)
+            "active": s.is_active,
+            "total_posts": s.total_posts,
+            "errors": s.errors,
+            "start_time": s.start_time.isoformat(),
+            "last_post_time": s.last_post_time.isoformat() if s.last_post_time else None,
+            "duration": str(datetime.now() - s.start_time)
         }
-        for task_id, state in active_tasks.items()
+        for task_id, s in active_tasks.items()
     }

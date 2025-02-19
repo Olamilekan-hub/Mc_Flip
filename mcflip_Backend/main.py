@@ -7,6 +7,7 @@ from routes.custom_post_route import router as custom_post_router
 from routes.get_bulk_url_route import router as bulk_url_router
 from routes.check_listings_routes import router as listings_router
 from routes.delete_listings_routes import router as delete_router
+from routes.subscription_routes import router as subscription_router
 
 app = FastAPI()
 
@@ -27,6 +28,7 @@ app.include_router(custom_post_router, prefix="/api")
 app.include_router(bulk_url_router, prefix="/api")
 app.include_router(listings_router, prefix="/api"   )
 app.include_router(delete_router, prefix="/api"   )
+app.include_router(subscription_router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn

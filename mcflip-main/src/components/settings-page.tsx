@@ -42,7 +42,7 @@ export function SettingsPage() {
       fetchApiKeys().catch((error) => {
         console.error("Error fetching API keys and Timing:", error);
       });
-}}, [status, session, USER_ID]);
+}}, [status]);
 
   // Save API Keys to Firestore
   const handleSave = async () => {

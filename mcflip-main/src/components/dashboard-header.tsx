@@ -1,6 +1,6 @@
 "use client"
 
-import { Boxes, CreditCard, Settings } from "lucide-react";
+import { CreditCard, Settings } from "lucide-react";
 import { Button } from "./ui/button";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -19,14 +19,6 @@ export default function DashboardHeader() {
                     Posting
                 </Button>
             </Link>
-            {/* <Link href="/dashboard/delete" className="flex-1">
-                <Button 
-                    variant="outline" 
-                    className={`w-full ${pathname === "/dashboard/delete" ? "bg-accent text-accent-foreground" : ""}`}
-                >
-                    Delete Listings
-                </Button>
-            </Link> */}
             <Link href="/dashboard/settings" className="flex-1">
                 <Button 
                     variant="outline" 
@@ -43,15 +35,6 @@ export default function DashboardHeader() {
                 >
                     <CreditCard className="w-4 h-4 mr-2" />
                     Subscription
-                </Button>
-            </Link>
-            <Link href="/dashboard/inventory" className="flex-1">
-                <Button 
-                    variant="outline" 
-                    className={`w-full ${pathname === "/dashboard/inventory" ? "bg-accent text-accent-foreground" : ""}`}
-                >
-                    <Boxes className="w-4 h-4 mr-2" />
-                    Bulk Inventory
                 </Button>
             </Link>
         </div>

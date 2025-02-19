@@ -35,7 +35,7 @@ class ListingRequest(BaseModel):
     category: str
     platform: str
     upc: str
-    price: int
+    price: float
     accept_currency: str
     shipping_within_days: int
     expire_in_days: int
