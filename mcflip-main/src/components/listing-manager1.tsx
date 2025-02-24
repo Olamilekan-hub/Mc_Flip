@@ -48,6 +48,7 @@ import { CiEdit } from "react-icons/ci";
 import { BiSave } from "react-icons/bi";
 import { BiLoaderCircle } from "react-icons/bi";
 import { FaAngleDoubleDown } from "react-icons/fa";
+import { object } from "zod";
 
 interface Listing {
   id: string;
@@ -57,7 +58,7 @@ interface Listing {
   category?: string;
   platform?: string;
   name: string;
-  price?: string | number;
+  price?: number | any;
   accept_currency?: string;
   upc?: string;
   cognitoidp_client?: string;
@@ -99,8 +100,8 @@ export function ListingManager() {
   
   // If your code or UI references these, you may keep them. 
   // Below variables are used in effect to avoid runtime errors:
-  const [timeBetweenListings, setTimeBetweenListings] = useState<string>("");
-  const [deleteListingsHours, setDeleteListingsHours] = useState<string>("");
+  const [timeBetweenListings, setTimeBetweenListings] = useState<number>(0);
+  const [deleteListingsHours, setDeleteListingsHours] = useState<number>(0);
 
   // Main listing data stored in Firestore
   const [responseData, setResponseData] = useState<ResponseData | null>(null);
@@ -108,7 +109,7 @@ export function ListingManager() {
   // Subscription details (includes subscription_key, expires_at, and new subStatus)
   const [subscriptionDetails, setSubscriptionDetails] = useState<{
     subscription_key: string;
-    expires_at: string;
+    expires_at: any;
     subStatus: string;
   } | null>(null);
 
@@ -128,6 +129,7 @@ export function ListingManager() {
   const [isCustomModalOpen, setIsCustomModalOpen] = useState<boolean>(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [alertModal, setAlertModal] = useState<boolean>(false);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
 
   const [alertMessage, setAlertMessage] = useState<string>("");
 
@@ -160,6 +162,13 @@ export function ListingManager() {
 
   // For custom listing tags
   const [tags, setTags] = useState<string[]>([]);
+  const [tagInputs, setTagInputs] = useState({
+    id: "",
+    type: "",
+    mode: "",
+    platform: "",
+  });
+  
 
   // For editing a single listing
   const [selectedItem, setSelectedItem] = useState<Listing | null>(null);
@@ -181,6 +190,18 @@ export function ListingManager() {
               subStatus: data.subStatus || "Active",
             });
           }
+          let updateData: any = {};
+          if (!data.subscription_key || !data.expires_at || !data.subStatus) {
+            setSubscriptionDetails({
+              subscription_key: "",
+              expires_at: "2025-01-01T00:00:00.815529",
+              subStatus: "Expired",
+            });
+            updateData = subscriptionDetails;
+          }
+          if (updateData) {
+            await setDoc(docRef, updateData, {merge: true});
+          }
         }
       }
     };
@@ -188,7 +209,7 @@ export function ListingManager() {
     if (status === "authenticated" && userID) {
       fetchSubscription().catch((err) => console.error(err));
     }
-  }, [status, userID]);
+  }, [status, userID, subscriptionDetails]);
 
   // --------------------------
   // Countdown timer effect that updates subStatus and saves it to Firestore
@@ -259,14 +280,14 @@ export function ListingManager() {
               setApiKey(typeof data.apiKey === "string" ? data.apiKey : "");
               setApiSecret(typeof data.apiSecret === "string" ? data.apiSecret : "");
               setTimeBetweenListings(
-                typeof data.timeBetweenListings === "string"
+                typeof data.timeBetweenListings === "number"
                   ? data.timeBetweenListings
-                  : ""
+                  : 0
               );
               setDeleteListingsHours(
-                typeof data.deleteListingsHours === "string"
+                typeof data.deleteListingsHours === "number"
                   ? data.deleteListingsHours
-                  : ""
+                  : 0
               );
             }
           } catch (error) {
@@ -303,7 +324,7 @@ export function ListingManager() {
     setTimeout(() => {
       setAlertModal(false);
       setAlertMessage("");
-    }, 10000); // 10 seconds
+    }, 600000); // 10 seconds
   };
 
   // --------------
@@ -767,121 +788,125 @@ export function ListingManager() {
   // Prepare and post a single custom listing
   // --------------
   const handleCustomListingSubmit = async (
-    event: React.FormEvent<HTMLFormElement>
-  ): Promise<void> => {
-    event.preventDefault();
-    setIsPostingCustom(true);
+  event: React.FormEvent<HTMLFormElement>
+): Promise<void> => {
+  event.preventDefault();
+  setIsPostingCustom(true);
 
-    const formData = new FormData(event.currentTarget);
-    const newListing: Listing = {
-      id: `custom-${Date.now()}`,
-      kind: formData.get("kind") as string,
-      description: (formData.get("description") as string) ?? "",
-      owner: "custom-owner",
-      category: formData.get("category") as string,
-      name: (formData.get("name") as string) ?? "",
-      price: parseFloat(formData.get("price") as string),
-      accept_currency: "USD",
-      upc: "",
-      cognitoidp_client: "marketplace",
-      tags,
-      digital:
-        (formData.get("category")?.toString() ?? "").includes("DIGITAL") ?? false,
-      digital_deliverable: (formData.get("category") as string)?.includes("DIGITAL")
-        ? "true"
-        : "false",
-      shipping_fee: parseFloat((formData.get("shipping_fee") as string) ?? "0"),
-      shipping_paid_by: (formData.get("shipping_paid_by") as string) ?? "seller",
-      shipping_within_days: parseInt(
-        formData.get("shipping_within_days") as string,
-        10
-      ) ?? 3,
-      expire_in_days: parseInt(formData.get("expire_in_days") as string, 10) ?? 7,
-      visibility: (formData.get("visibility") as string) ?? "public",
-      image_urls: uploadedImageUrl ? [uploadedImageUrl] : [],
-      additional_images: uploadedImageUrl ? [uploadedImageUrl] : [],
-      cover_photo: uploadedImageUrl ?? "",
-      platform: formData.get("platform") as string,
+  const formData = new FormData(event.currentTarget);
+  const newListing: Listing = {
+    id: `custom-${Date.now()}`,
+    kind: formData.get("kind") as string,
+    description: (formData.get("description") as string) ?? "",
+    owner: "custom-owner",
+    category: formData.get("category") as string,
+    name: (formData.get("name") as string) ?? "",
+    price: parseFloat(formData.get("price") as string),
+    accept_currency: "USD",
+    upc: "",
+    cognitoidp_client: "marketplace",
+    tags,
+    digital:
+      (formData.get("category")?.toString() ?? "").includes("DIGITAL") ?? false,
+    digital_deliverable: (formData.get("digital_deliverable") as string) ?? "",
+    shipping_fee: parseFloat((formData.get("shipping_fee") as string) ?? "0"),
+    shipping_paid_by: (formData.get("shipping_paid_by") as string) ?? "seller",
+    shipping_within_days: parseInt(
+      formData.get("shipping_within_days") as string,
+      10
+    ) ?? 3,
+    expire_in_days: parseInt(formData.get("expire_in_days") as string, 10) ?? 7,
+    visibility: (formData.get("visibility") as string) ?? "public",
+    image_urls: uploadedImageUrl ? [uploadedImageUrl] : [],
+    additional_images: uploadedImageUrl ? [uploadedImageUrl] : [],
+    cover_photo: uploadedImageUrl ?? "",
+    platform: formData.get("platform") as string,
+  };
+
+  // Attempt posting
+  await handleCustomPostListing(newListing);
+  setIsCustomModalOpen(false);
+};
+
+const handleCustomPostListing = async (listing: Listing): Promise<void> => {
+  try {
+    // Verify images
+    if (listing.image_urls && listing.image_urls.length > 0) {
+      const mainValid = await verifyImage(listing.image_urls[0]);
+      if (!mainValid) {
+        throw new Error(`Main image URL is not accessible: ${listing.image_urls[0]}`);
+      }
+    }
+
+    if (listing.additional_images && listing.additional_images.length > 0) {
+      for (const imgUrl of listing.additional_images) {
+        const addValid = await verifyImage(imgUrl);
+        if (!addValid) {
+          throw new Error(`Additional image URL is not accessible: ${imgUrl}`);
+        }
+      }
+    }
+
+    // Prepare final data
+    const listingData = {
+      kind: "item",
+      owner: listing.owner,
+      status: "draft",
+      name: listing.name,
+      description: listing.description,
+      category: listing.category ?? "DIGITAL_INGAME",
+      platform: listing.platform ?? "unknown",
+      upc: listing.upc,
+      price: listing.price ?? 0,
+      accept_currency: listing.accept_currency,
+      shipping_within_days: listing.shipping_within_days ?? 3,
+      expire_in_days: listing.expire_in_days ?? 7,
+      shipping_fee: 0,
+      shipping_paid_by: "seller",
+      shipping_predefined_package: "None",
+      cognitoidp_client: listing.cognitoidp_client,
+      tags: listing.tags ?? ["id:bundle", "type:custom"],
+      digital: true,
+      digital_region: "none",
+      digital_deliverable: listing.digital_deliverable ?? "transfer",
+      visibility: "public",
+      image_url:
+        listing.image_urls && listing.image_urls.length > 0
+          ? listing.image_urls[0]
+          : null,
+      additional_images: listing.additional_images ?? [],
     };
 
-    // Attempt posting
-    await handleCustomPostListing(newListing);
-    setIsCustomModalOpen(false);
-  };
-
-  const handleCustomPostListing = async (listing: Listing): Promise<void> => {
-    try {
-      // Verify images
-      if (listing.image_urls && listing.image_urls.length > 0) {
-        const mainValid = await verifyImage(listing.image_urls[0]);
-        if (!mainValid) {
-          throw new Error(`Main image URL is not accessible: ${listing.image_urls[0]}`);
-        }
+    const response = await axios.post(
+      "http://localhost:8000/api/custom-post-listing",
+      listingData,
+      {
+        headers: { "Content-Type": "application/json" },
       }
+    );
 
-      if (listing.additional_images && listing.additional_images.length > 0) {
-        for (const imgUrl of listing.additional_images) {
-          const addValid = await verifyImage(imgUrl);
-          if (!addValid) {
-            throw new Error(`Additional image URL is not accessible: ${imgUrl}`);
-          }
-        }
-      }
-
-      // Prepare final data
-      const listingData = {
-        kind: "item",
-        owner: listing.owner,
-        status: "draft",
-        name: listing.name,
-        description: listing.description,
-        category: listing.category ?? "DIGITAL_INGAME",
-        platform: listing.platform ?? "unknown",
-        upc: listing.upc,
-        price: listing.price ?? 0,
-        accept_currency: listing.accept_currency,
-        shipping_within_days: listing.shipping_within_days ?? 3,
-        expire_in_days: listing.expire_in_days ?? 7,
-        shipping_fee: 0,
-        shipping_paid_by: "seller",
-        shipping_predefined_package: "None",
-        cognitoidp_client: listing.cognitoidp_client,
-        tags: listing.tags ?? ["id:bundle", "type:custom"],
-        digital: true,
-        digital_region: "none",
-        digital_deliverable: listing.digital_deliverable ?? "transfer",
-        visibility: "public",
-        image_url:
-          listing.image_urls && listing.image_urls.length > 0
-            ? listing.image_urls[0]
-            : null,
-        additional_images: listing.additional_images ?? [],
-      };
-
-      const response = await axios.post(
-        "http://localhost:8000/api/custom-post-listing",
-        listingData,
-        {
-          headers: { "Content-Type": "application/json" },
-        }
+    if (response.data.status === "SUCCESS") {
+      const listingUrl = response.data.listing_url || `https://gameflip.com/item/${response.data.listing_id}`;
+      // Here we use an HTML anchor tag so that the link is clickable.
+      showAlert(
+        `<div className="flex flex-col items-center justify-center w-full "> Successfully created custom listing: ${listing.name}. Check it out here: <br/> <span className="underline text-blue-500/70 text-center"><a href="${listingUrl}" target="_blank" rel="noopener noreferrer">${listingUrl}</a></span></div>`
       );
-
-      if (response.data.status === "SUCCESS") {
-        showAlert(`Successfully created custom listing: ${listing.name}`);
-      }
-    } catch (error: any) {
-      console.error(`Error posting custom listing ${listing.name}:`, error);
-      const errorMessage =
-        error.response?.data?.detail ?? error.message ?? "Failed to create listing";
-      showAlert(errorMessage);
-    } finally {
-      setIsPostingCustom(false);
-      setTags([]);
-      setPhotoPreview(null);
-      setPhotoFile(null);
-      setUploadedImageUrl(null);
     }
-  };
+  } catch (error: any) {
+    console.error(`Error posting custom listing ${listing.name}:`, error);
+    const errorMessage =
+      error.response?.data?.detail ?? error.message ?? "Failed to create listing";
+    showAlert(errorMessage);
+  } finally {
+    setIsPostingCustom(false);
+    setTags([]);
+    setPhotoPreview(null);
+    setPhotoFile(null);
+    setUploadedImageUrl(null);
+  }
+};
+
+  
 
   // --------------
   // Editing existing Firestore listing
@@ -944,6 +969,7 @@ export function ListingManager() {
     event: React.FormEvent<HTMLFormElement>
   ): Promise<void> => {
     event.preventDefault();
+    setIsUpdating(true)
     if (!selectedItem) return;
 
     const updatedListing: Listing = {
@@ -953,6 +979,7 @@ export function ListingManager() {
       shipping_fee: parseFloat((event.currentTarget.shipping_fee as any).value ?? "0"),
       description: (event.currentTarget.description as any).value,
       category: (event.currentTarget.category as any).value,
+      digital_deliverable: (event.currentTarget.digital_deliverable as any).value,
       shipping_paid_by: (event.currentTarget.shipping_paid_by as any).value,
       expire_in_days: parseInt((event.currentTarget.expire_in_days as any).value) ?? 0,
       shipping_within_days: parseInt((event.currentTarget.shipping_within_days as any).value) ?? 0,
@@ -974,12 +1001,14 @@ export function ListingManager() {
       const listings: Listing[] = data.listings ?? [];
 
       const updatedListings = listings.map((l) =>
-        l.id === selectedItem.id ? { ...l, ...updatedListing } : l
+        l.id === selectedItem.id ? { ...l, ... updatedListing } : l
       );
 
       await updateDoc(allListingsRef, { listings: updatedListings });
       
       showAlert("Listing updated successfully!");
+      setIsUpdating(false)
+      setIsEditModalOpen(false);
       await fetchListings(userID);
     } catch (error: any) {
       console.error("Error updating listing:", error);
@@ -995,8 +1024,8 @@ export function ListingManager() {
 
       {subscriptionDetails && subscriptionDetails.subStatus !== "Active" ? (
 
-        <div className="nx-auto bg-background text-foreground flex items-center justify-center mt-[12rem]">
-          <Card className="mb-4 p-4">
+        <div className="mx-auto w-full bg-background text-foreground mt-[rem] flex flex-col items-center justify-center gap-5">
+          <Card className="mb-4 p-4 w-full">
             <div className="font-bold">
               <div>Subscription Details:</div>
             </div>
@@ -1006,13 +1035,14 @@ export function ListingManager() {
               <p className="bg-white/90 rounded-md p-2 text-black/70 font-medium">Status: {subscriptionDetails?.subStatus}</p>
             </div>
           </Card>
-          <Card className="w-full max-w-md">
+
+          <Card className="w-full max-w-[50%] mx-auto">
             <div className="text-3xl font-bold w-full text-center pt-8">
               <h1>Subscription Expired</h1>
             </div>
             <div className="px-4 py-8 text-center ">
               <p className="font-semibold text-lg py-2">Your subscription has expired.</p>
-              <p className="font-semibold text-md py-5 flex items-center justify-center">Visit the page below to activate your subscription. <FaAngleDoubleDown className="mr-2 h-4 w-4" /></p>
+              <p className="font-semibold text-md py-5 flex items-center justify-center gap-3">Visit the page below to activate your subscription. <FaAngleDoubleDown className="mr-2 h-4 w-4" /></p>
               <Link href="/dashboard/subscription" className="">
                 <Button 
                     variant="outline" 
@@ -1026,19 +1056,42 @@ export function ListingManager() {
           </Card>
         </div>
 
-      ) : (
+       ) : (
+        apiKey === "" || apiSecret === "" ? (
+          <div className="w-full flex flex-col justify-center">
+          <Card className="mb-4 p-4 w-full">
+            <div className="font-bold">
+              <div>Subscription Details:</div>
+            </div>
+            <div className="flex items-center justify-center gap-12">
+              <p>Expires: {new Date(subscriptionDetails?.expires_at).toLocaleString()}</p>
+              <p>Time Remaining: {timeRemaining}</p>
+              <p className="bg-white/90 rounded-md p-2 text-black/70 font-medium">Status: {subscriptionDetails?.subStatus}</p>
+            </div>
+          </Card>
 
+          <Card className="w-full max-w-[50%] mx-auto">
+            <div className="text-3xl font-bold w-full text-center pt-8">
+              <h1>Invalid Api Keys</h1>
+            </div>
+            <div className="px-4 py-8 text-center ">
+              <p className="font-semibold text-lg py-2">You haven't provided your Api Keys.</p>
+              <p className="font-semibold text-md py-5 flex items-center justify-center gap-3">Visit the settings page to provide your keys. <FaAngleDoubleDown className="mr-2 h-4 w-4" /></p>
+              <Link href="/dashboard/settings " className="">
+                <Button 
+                    variant="outline" 
+                    className={`w-full ${pathname === "/dashboard/settings" ? "bg-accent text-accent-foreground" : ""}`}
+                >
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    Subscription
+                </Button>
+            </Link>
+            </div>
+          </Card>
+
+          </div>
+       ) : (
       <div>
-        <Card className="mb-4 p-2">
-          <div className="font-bold">
-            <div>Subscription Details:</div>
-          </div>
-          <div className="flex items-center justify-center gap-12">
-            <p>Expires: {new Date(subscriptionDetails?.expires_at).toLocaleString()}</p>
-            <p>Time Remaining: {timeRemaining}</p>
-            <p className="bg-white/90 rounded-md p-2 text-black/70 font-medium">Status: {subscriptionDetails?.subStatus}</p>
-          </div>
-        </Card>
         <h2 className="mb-4 text-xl font-bold text-white">Create New Listing</h2>
 
         <div className="grid gap-8 md:grid-cols-2">
@@ -1203,8 +1256,8 @@ export function ListingManager() {
           </Card>
         </div>
       </div>
-      )}
-
+      ))}
+      
       <div className="mt-8 flex justify-end">
         <Button variant="link" className="text-muted-foreground" onClick={() => signOut()}>
           Logout
@@ -1446,7 +1499,7 @@ export function ListingManager() {
                 <label htmlFor="custom-price" className="block font-medium text-white/60">
                   Price:
                 </label>
-                <Input type="number" id="custom-price" name="price" step="0.01" required />
+                <Input type="number" id="custom-price" name="price" step="0.01" min="10" required />
               </div>
 
               <div className="mb-4">
@@ -1462,6 +1515,8 @@ export function ListingManager() {
                   name="shipping_fee"
                   step="0.01"
                   defaultValue="0"
+                  required
+                  min="10"
                 />
               </div>
 
@@ -1488,6 +1543,8 @@ export function ListingManager() {
                     id="custom-shipping-within-days"
                     name="shipping_within_days"
                     defaultValue="3"
+                    min="1"
+                    required
                   />
                 </div>
                 <div>
@@ -1502,6 +1559,8 @@ export function ListingManager() {
                     id="custom-expire-in-days"
                     name="expire_in_days"
                     defaultValue="7"
+                    min="3"
+                    required
                   />
                 </div>
               </div>
@@ -1557,10 +1616,24 @@ export function ListingManager() {
                     <SelectItem value="CONSOLE_VIDEO_GAMES">Console Video Games</SelectItem>
                     <SelectItem value="GIFTCARD">Gift Card</SelectItem>
                     <SelectItem value="CREATIVE">Creative</SelectItem>
-                    <SelectItem value="CONSOLE_VIDEO_GAMES">Console Video Games</SelectItem>
                     <SelectItem value="KNOWLEDGE">Knowledge</SelectItem>
                     <SelectItem value="BOOSTING">Boosting</SelectItem>
                     <SelectItem value="FUN">Fun</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="Digital Method" className="block font-medium text-white/60">
+                  Digital Method:
+                </label>
+                <Select id="Digital Method" name="digital_deliverable"  required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Digital Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="code">Digital Code</SelectItem>
+                    <SelectItem value="transfer">Coordinated Transfer</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1620,6 +1693,57 @@ export function ListingManager() {
                 </div>
               </div>
 
+              <div className="mb-4">
+                <label className="block font-medium text-gray-700">Tags:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-sm">ID:</label>
+                    <Input
+                      type="text"
+                      placeholder="Other"
+                      value={tagInputs.id}
+                      onChange={(e) =>
+                        setTagInputs((prev) => ({ ...prev, id: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm">Type:</label>
+                    <Input
+                      type="text"
+                      placeholder="Other"
+                      value={tagInputs.type}
+                      onChange={(e) =>
+                        setTagInputs((prev) => ({ ...prev, type: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm">Mode:</label>
+                    <Input
+                      type="text"
+                      placeholder="Save the World"
+                      value={tagInputs.mode}
+                      onChange={(e) =>
+                        setTagInputs((prev) => ({ ...prev, mode: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm">Platform:</label>
+                    <Input
+                      type="text"
+                      placeholder="Epic Games"
+                      value={tagInputs.platform}
+                      onChange={(e) =>
+                        setTagInputs((prev) => ({ ...prev, platform: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+
               <ModalFooter>
                 <Button onClick={() => setIsCustomModalOpen(false)} variant="outline">
                   Cancel
@@ -1627,7 +1751,7 @@ export function ListingManager() {
                 <Button
                   type="submit"
                   variant="secondary"
-                  disabled={isUploading}
+                  disabled={isUploading || isPostingCustom || tags.length === 0 || uploadedImageUrl === null}
                   className={isPostingCustom ? "bg-destructive/70" : ""}
                 >
                   {isUploading ? (
@@ -1698,6 +1822,7 @@ export function ListingManager() {
                   // defaultValue={selectedItem?.price}
                   defaultValue={parseFloat(selectedItem?.price).toFixed(2)}
                   step="0.01"
+                  min="10"
                   required
                 />
               </div>
@@ -1712,6 +1837,7 @@ export function ListingManager() {
                   name="shipping_fee"
                   defaultValue={selectedItem?.shipping_fee}
                   step="0.01"
+                  min="0"
                   required
                 />
               </div>
@@ -1744,6 +1870,8 @@ export function ListingManager() {
                     id="shipping-within-days"
                     name="shipping_within_days"
                     defaultValue={selectedItem?.shipping_within_days}
+                    min="1"
+                    required
                   />
                 </div>
                 <div>
@@ -1758,6 +1886,8 @@ export function ListingManager() {
                     id="expire-in-days"
                     name="expire_in_days"
                     defaultValue={selectedItem?.expire_in_days}
+                    min="3"
+                    required
                   />
                 </div>
               </div>
@@ -1818,10 +1948,24 @@ export function ListingManager() {
                     <SelectItem value="CONSOLE_VIDEO_GAMES">Console Video Games</SelectItem>
                     <SelectItem value="GIFTCARD">Gift Card</SelectItem>
                     <SelectItem value="CREATIVE">Creative</SelectItem>
-                    <SelectItem value="CONSOLE_VIDEO_GAMES">Console Video Games</SelectItem>
                     <SelectItem value="KNOWLEDGE">Knowledge</SelectItem>
                     <SelectItem value="BOOSTING">Boosting</SelectItem>
                     <SelectItem value="FUN">Fun</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="Digital Method" className="block font-medium text-white/60">
+                  Digital Method:
+                </label>
+                <Select id="Digital Method" name="digital_deliverable" defaultValue={selectedItem?.digital_deliverable} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Digital Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="code">Digital Code</SelectItem>
+                    <SelectItem value="transfer">Coordinated Transfer</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1846,8 +1990,8 @@ export function ListingManager() {
                 <Button onClick={() => setIsEditModalOpen(false)} variant="outline">
                   Cancel
                 </Button>
-                <Button type="submit" variant="secondary">
-                  Save Changes
+                <Button type="submit" variant="secondary" disabled={isUpdating}>
+                  {!isUpdating ? "Save Changes" : "Updating Changes" }
                 </Button>
               </ModalFooter>
             </form>
@@ -1861,9 +2005,10 @@ export function ListingManager() {
           <DialogHeader>
             <DialogTitle>ALERT!</DialogTitle>
           </DialogHeader>
-          <div className="flex items-center justify-center">
-            <p className="text-md">{alertMessage}</p>
-          </div>
+          <div
+            className="flex items-center justify-center text-md text-md underline flex-col mx-auto w-full"
+            dangerouslySetInnerHTML={{ __html: alertMessage }}
+          />
           <DialogFooter>
             <Button onClick={() => setAlertModal(false)} variant="outline">
               Close

@@ -19,37 +19,59 @@ export function SettingsPage() {
 
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
-  const [timeBetweenListings, setTimeBetweenListings] = useState("");
-  const [deleteListingsHours, setDeleteListingsHours] = useState("");
+  const [timeBetweenListings, setTimeBetweenListings] = useState<number>();
+  const [deleteListingsHours, setDeleteListingsHours] = useState<number>();
   const [loading, setLoading] = useState(false);
 
+  interface UserData {
+    apiKey?: string;
+    apiSecret?: string;
+    timeBetweenListings?: number;
+    deleteListingsHours?: number;
+  }
+  
   // Fetch API Keys from Firestore
   useEffect(() => {
     const fetchApiKeys = async () => {
       const docRef = doc(db, "users", USER_ID);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        const data = docSnap.data();
-        console.log(data)
+        const data = docSnap.data() as UserData; // Cast to your defined type
         setApiKey(typeof data.apiKey === "string" ? data.apiKey : "");
         setApiSecret(typeof data.apiSecret === "string" ? data.apiSecret : "");
-        setTimeBetweenListings(typeof data.timeBetweenListings === "string" ? data.timeBetweenListings : "" );
-        setDeleteListingsHours(typeof data.deleteListingsHours === "string" ? data.deleteListingsHours : "");
+  
+        const updateData: Partial<UserData> = {};
+        if (!data.timeBetweenListings) {
+          setTimeBetweenListings(5);
+          updateData.timeBetweenListings = 5;
+        } else {
+          setTimeBetweenListings(data.timeBetweenListings);
+        }
+        if (!data.deleteListingsHours) {
+          setDeleteListingsHours(1);
+          updateData.deleteListingsHours = 1;
+        } else {
+          setDeleteListingsHours(data.deleteListingsHours);
+        }
+        if (Object.keys(updateData).length > 0) {
+          await setDoc(docRef, updateData, { merge: true });
+        }
       }
     };
-    
+  
     if (status === "authenticated" && USER_ID) {
       fetchApiKeys().catch((error) => {
         console.error("Error fetching API keys and Timing:", error);
       });
-}}, [status]);
-
-  // Save API Keys to Firestore
+    }
+  }, [status, USER_ID]);
+  
+   // Save API Keys to Firestore
   const handleSave = async () => {
     setLoading(true);
     try {
       const docRef = doc(db, "users", USER_ID);
-      await setDoc(docRef, { apiKey, apiSecret, deleteListingsHours, timeBetweenListings }, { merge: true });
+      await setDoc(docRef, { apiKey, apiSecret, deleteListingsHours,timeBetweenListings }, { merge: true });
       alert("API Keys and Timing updated successfully!");
     } catch (error) {
       console.error("Error saving API keys and Timing:", error);
@@ -77,9 +99,9 @@ export function SettingsPage() {
                     <Input
                       id="listingTime"
                       type="number"
+                      min="5"
                       value={timeBetweenListings}
-                      onChange={e => setTimeBetweenListings(e.target.value)}
-                      // defaultValue="95"
+                      onChange={(e) => setTimeBetweenListings(Number(e.target.value))}
                       className="bg-background border-primary/20"
                     />
                   </div>
@@ -90,9 +112,9 @@ export function SettingsPage() {
                     <Input
                       id="deleteTime"
                       type="number"
+                      min="1"
                       value={deleteListingsHours}
-                      onChange={e => setDeleteListingsHours(e.target.value)}
-                      // defaultValue="64.00"
+                      onChange={(e) => setDeleteListingsHours(Number(e.target.value))}
                       className="bg-background border-primary/20"
                     />
                   </div>
