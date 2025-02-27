@@ -13,6 +13,7 @@ import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Switch } from "~/components/ui/switch";
+import StructuredTagInput from "~/components/ui/StructuredTagInput"; 
 import {
   Dialog,
   DialogContent,
@@ -33,6 +34,7 @@ import {
   Link2,
   ClipboardList,
   CreditCard,
+  Settings,
   Trash2,
   Copy,
   Check,
@@ -143,8 +145,13 @@ export function ListingManager() {
   // Additional states
   const [importUrls, setImportUrls] = useState<string>("");
   const [urls, setUrls] = useState<string[]>([]);
+  const [customUrl, setCustomUrl] = useState<string[]>([]);
   const [copied, setCopied] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  // Inside your ListingManager component, add a state for tags
+  const [listingTags, setListingTags] = useState<string[]>([]);
+  const [tagInputs, setTagInputs] = useState<string[]>([]);
+  const [formTags, setFormTags] = useState<string[]>([]);
 
   // For listing count
   const [loadingNumListing, setLoadingNumListing] = useState<boolean>(false);
@@ -162,12 +169,6 @@ export function ListingManager() {
 
   // For custom listing tags
   const [tags, setTags] = useState<string[]>([]);
-  const [tagInputs, setTagInputs] = useState({
-    id: "",
-    type: "",
-    mode: "",
-    platform: "",
-  });
   
 
   // For editing a single listing
@@ -209,7 +210,12 @@ export function ListingManager() {
     if (status === "authenticated" && userID) {
       fetchSubscription().catch((err) => console.error(err));
     }
-  }, [status, userID, subscriptionDetails]);
+
+    if (selectedItem?.tags) {
+      setFormTags(selectedItem.tags);
+    }
+    console.log("tag", tagInputs);
+  }, [status, userID, subscriptionDetails, selectedItem, tagInputs]);
 
   // --------------------------
   // Countdown timer effect that updates subStatus and saves it to Firestore
@@ -324,7 +330,7 @@ export function ListingManager() {
     setTimeout(() => {
       setAlertModal(false);
       setAlertMessage("");
-    }, 600000); // 10 seconds
+    }, 60000); // 1 minute
   };
 
   // --------------
@@ -638,6 +644,20 @@ export function ListingManager() {
     );
   };
 
+  const copyCustomLinks = (): void => {
+    if (!customUrl.length) return;
+    const allLinks = customUrl.join("\n");
+    navigator.clipboard.writeText(allLinks).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      },
+      () => {
+        setError("Failed to copy links. Please try again.");
+      }
+    );
+  };
+
   // --------------
   // Check total listings
   // --------------
@@ -746,6 +766,7 @@ export function ListingManager() {
     }
   }
 
+  
   const uploadToCloudinary = async (): Promise<void> => {
     if (!photoFile) {
       showAlert("No image file selected!");
@@ -796,31 +817,31 @@ export function ListingManager() {
   const formData = new FormData(event.currentTarget);
   const newListing: Listing = {
     id: `custom-${Date.now()}`,
-    kind: formData.get("kind") as string,
+    // kind: formData.get("kind") as string,
     description: (formData.get("description") as string) ?? "",
     owner: "custom-owner",
-    category: formData.get("category") as string,
+    // category: formData.get("category") as string,
     name: (formData.get("name") as string) ?? "",
     price: parseFloat(formData.get("price") as string),
     accept_currency: "USD",
     upc: "",
     cognitoidp_client: "marketplace",
-    tags,
-    digital:
-      (formData.get("category")?.toString() ?? "").includes("DIGITAL") ?? false,
-    digital_deliverable: (formData.get("digital_deliverable") as string) ?? "",
+    // tags,
+    // digital:
+    //   (formData.get("category")?.toString() ?? "").includes("DIGITAL") ?? false,
+    // digital_deliverable: (formData.get("digital_deliverable") as string) ?? "",
     shipping_fee: parseFloat((formData.get("shipping_fee") as string) ?? "0"),
-    shipping_paid_by: (formData.get("shipping_paid_by") as string) ?? "seller",
-    shipping_within_days: parseInt(
-      formData.get("shipping_within_days") as string,
-      10
-    ) ?? 3,
-    expire_in_days: parseInt(formData.get("expire_in_days") as string, 10) ?? 7,
-    visibility: (formData.get("visibility") as string) ?? "public",
+    // shipping_paid_by: (formData.get("shipping_paid_by") as string) ?? "seller",
+    // shipping_within_days: parseInt(
+    //   formData.get("shipping_within_days") as string,
+    //   10
+    // ) ?? 3,
+    // expire_in_days: parseInt(formData.get("expire_in_days") as string, 10) ?? 7,
+    // visibility: "public",
     image_urls: uploadedImageUrl ? [uploadedImageUrl] : [],
     additional_images: uploadedImageUrl ? [uploadedImageUrl] : [],
     cover_photo: uploadedImageUrl ?? "",
-    platform: formData.get("platform") as string,
+    // platform: formData.get("platform") as string,
   };
 
   // Attempt posting
@@ -849,7 +870,7 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
 
     // Prepare final data
     const listingData = {
-      kind: "item",
+      // kind: "item",
       owner: listing.owner,
       status: "draft",
       name: listing.name,
@@ -857,18 +878,18 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
       category: listing.category ?? "DIGITAL_INGAME",
       platform: listing.platform ?? "unknown",
       upc: listing.upc,
-      price: listing.price ?? 0,
+      price: (listing.price ?? 0) * 100,
       accept_currency: listing.accept_currency,
-      shipping_within_days: listing.shipping_within_days ?? 3,
-      expire_in_days: listing.expire_in_days ?? 7,
+      shipping_within_days: 3,
+      expire_in_days: 7,
       shipping_fee: 0,
-      shipping_paid_by: "seller",
+      // shipping_paid_by: "seller",
       shipping_predefined_package: "None",
       cognitoidp_client: listing.cognitoidp_client,
-      tags: listing.tags ?? ["id:bundle", "type:custom"],
-      digital: true,
-      digital_region: "none",
-      digital_deliverable: listing.digital_deliverable ?? "transfer",
+      // tags: listing.tags ?? ["id:bundle", "type:custom"],
+      // digital: true,
+      // digital_region: "none",
+      // digital_deliverable: listing.digital_deliverable ?? "transfer",
       visibility: "public",
       image_url:
         listing.image_urls && listing.image_urls.length > 0
@@ -887,10 +908,17 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
 
     if (response.data.status === "SUCCESS") {
       const listingUrl = response.data.listing_url || `https://gameflip.com/item/${response.data.listing_id}`;
+      setCustomUrl([listingUrl]);
       // Here we use an HTML anchor tag so that the link is clickable.
       showAlert(
         `<div className="flex flex-col items-center justify-center w-full "> Successfully created custom listing: ${listing.name}. Check it out here: <br/> <span className="underline text-blue-500/70 text-center"><a href="${listingUrl}" target="_blank" rel="noopener noreferrer">${listingUrl}</a></span></div>`
       );
+
+      setIsCustomModalOpen(false);
+      setPhotoPreview(null);
+      setPhotoFile(null);
+      setUploadedImageUrl(null);
+      setTags([]);
     }
   } catch (error: any) {
     console.error(`Error posting custom listing ${listing.name}:`, error);
@@ -903,7 +931,10 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
     setPhotoPreview(null);
     setPhotoFile(null);
     setUploadedImageUrl(null);
-  }
+    setTimeout(() => {
+      setCustomUrl([]);
+    }, 60000);    
+    }
 };
 
   
@@ -962,6 +993,12 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
 
   const handleEditClick = (item: Listing): void => {
     setSelectedItem(item);
+    // Initialize tags from the selected item if available
+    if (item.tags && Array.isArray(item.tags)) {
+      setListingTags(item.tags);
+    } else {
+      setListingTags([]);
+    }
     setIsEditModalOpen(true);
   };
 
@@ -969,15 +1006,16 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
     event: React.FormEvent<HTMLFormElement>
   ): Promise<void> => {
     event.preventDefault();
-    setIsUpdating(true)
+    setIsUpdating(true);
     if (!selectedItem) return;
-
+  
     const updatedListing: Listing = {
       id: selectedItem.id,
       name: (event.currentTarget.name as any).value,
       price: parseFloat((event.currentTarget.price as any).value ?? "0"),
       shipping_fee: parseFloat((event.currentTarget.shipping_fee as any).value ?? "0"),
       description: (event.currentTarget.description as any).value,
+      upc: (event.currentTarget.upc as any).value,
       category: (event.currentTarget.category as any).value,
       digital_deliverable: (event.currentTarget.digital_deliverable as any).value,
       shipping_paid_by: (event.currentTarget.shipping_paid_by as any).value,
@@ -985,35 +1023,44 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
       shipping_within_days: parseInt((event.currentTarget.shipping_within_days as any).value) ?? 0,
       visibility: (event.currentTarget.visibility as any).value,
       kind: (event.currentTarget.kind as any).value,
+      tags: formTags, // Add the tags from state here
     };
-
+  
     try {
       const allListingsRef = doc(db, "users", userID, "importedListings", "allListings");
       const docSnap = await getDoc(allListingsRef);
-
+  
       if (!docSnap.exists()) {
         console.error("Error: 'allListings' document does not exist.");
         showAlert("The listings data is missing. Please refresh the page.");
         return;
       }
-
+  
       const data = docSnap.data();
       const listings: Listing[] = data.listings ?? [];
-
+  
       const updatedListings = listings.map((l) =>
-        l.id === selectedItem.id ? { ...l, ... updatedListing } : l
+        l.id === selectedItem.id ? { ...l, ...updatedListing } : l
       );
-
+  
       await updateDoc(allListingsRef, { listings: updatedListings });
       
       showAlert("Listing updated successfully!");
-      setIsUpdating(false)
+      setIsUpdating(false);
       setIsEditModalOpen(false);
       await fetchListings(userID);
     } catch (error: any) {
       console.error("Error updating listing:", error);
       showAlert(error.message);
     }
+  };
+  
+  
+  // Handle input changes
+  const handleTagChange = (index, field, value) => {
+    const updatedTags = [...tagInputs];
+    updatedTags[index] = { ...updatedTags[index], [field]: value };
+    setTagInputs(updatedTags);
   };
 
   // --------------
@@ -1057,6 +1104,7 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
         </div>
 
        ) : (
+
         apiKey === "" || apiSecret === "" ? (
           <div className="w-full flex flex-col justify-center">
           <Card className="mb-4 p-4 w-full">
@@ -1077,185 +1125,187 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
             <div className="px-4 py-8 text-center ">
               <p className="font-semibold text-lg py-2">You haven't provided your Api Keys.</p>
               <p className="font-semibold text-md py-5 flex items-center justify-center gap-3">Visit the settings page to provide your keys. <FaAngleDoubleDown className="mr-2 h-4 w-4" /></p>
-              <Link href="/dashboard/settings " className="">
+              <Link href="/dashboard/settings" className="flex-1">
                 <Button 
                     variant="outline" 
                     className={`w-full ${pathname === "/dashboard/settings" ? "bg-accent text-accent-foreground" : ""}`}
                 >
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    Subscription
+                    <Settings className="w-4 h-4 mr-2" />
+                    Settings
                 </Button>
             </Link>
             </div>
           </Card>
 
           </div>
+
        ) : (
-      <div>
-        <h2 className="mb-4 text-xl font-bold text-white">Create New Listing</h2>
 
-        <div className="grid gap-8 md:grid-cols-2">
-          <div className="space-y-4 mx-auto md:mx-1 md:max-w-[70%]">
-            <Card className="border-accent bg-card p-4">
-              <div className="space-y-2">
-                <Button
-                  className={`w-full ${
-                    isProcessing
-                      ? "cursor-not-allowed bg-gray-500"
+        <div>
+          <h2 className="mb-4 text-xl font-bold text-white">Create New Listing</h2>
+
+          <div className="grid gap-8 md:grid-cols-2">
+            <div className="space-y-4 mx-auto md:mx-1 md:max-w-[70%]">
+              <Card className="border-accent bg-card p-4">
+                <div className="space-y-2">
+                  <Button
+                    className={`w-full ${
+                      isProcessing
+                        ? "cursor-not-allowed bg-gray-500"
+                        : isPosting
+                        ? "cursor-not-allowed bg-gray-500"
+                        : "bg-accent hover:bg-accent/90"
+                    } text-accent-foreground`}
+                    onClick={handlePostListing}
+                    disabled={isProcessing ?? isPosting}
+                  >
+                    {isProcessing
+                      ? "Starting Posting..."
                       : isPosting
-                      ? "cursor-not-allowed bg-gray-500"
-                      : "bg-accent hover:bg-accent/90"
-                  } text-accent-foreground`}
-                  onClick={handlePostListing}
-                  disabled={isProcessing ?? isPosting}
-                >
-                  {isProcessing
-                    ? "Starting Posting..."
-                    : isPosting
-                    ? "Posting Active..."
-                    : "Start Posting"}
-                </Button>
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={handleStopPosting}
-                  disabled={!isPosting}
-                >
-                  Stop Posting
-                </Button>
-                <Button
-                  className="w-full bg-[#9333EA] text-white hover:bg-[#9333EA]/90"
-                  onClick={() => setIsCustomModalOpen(true)}
-                >
-                  CUSTOM ORDER
-                </Button>
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={() => setIsDeleteModalOpen(true)}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Listings
-                </Button>
-              </div>
-            </Card>
+                      ? "Posting Active..."
+                      : "Start Posting"}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={handleStopPosting}
+                    disabled={!isPosting}
+                  >
+                    Stop Posting
+                  </Button>
+                  <Button
+                    className="w-full bg-[#9333EA] text-white hover:bg-[#9333EA]/90"
+                    onClick={() => setIsCustomModalOpen(true)}
+                  >
+                    CUSTOM ORDER
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => setIsDeleteModalOpen(true)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Listings
+                  </Button>
+                </div>
+              </Card>
 
-            <Card className="border-accent bg-card p-4">
+              <Card className="border-accent bg-card p-4">
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setIsImportModalOpen(true)}
+                  >
+                    <Import className="mr-2 h-4 w-4" />
+                    Import URL
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setIsBulkModalOpen(true)}
+                  >
+                    <Link2 className="mr-2 h-4 w-4" />
+                    Get Bulk Links
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setIsNumListingModalOpen(true);
+                      handleCheckListings();
+                    }}
+                  >
+                    <ClipboardList className="mr-2 h-4 w-4" />
+                    Check Listings
+                  </Button>
+                </div>
+              </Card>
+            </div>
+
+            <Card className="border-accent bg-card p-4 w-[100%]">
+              <h3 className="mb-4 text-lg font-semibold text-white">
+                Available Listings to Post
+              </h3>
+              <div className="mb-4 flex items-center justify-between">
+                <Input
+                  placeholder="Search by name"
+                  className="w-2/3"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    checked={allSelected}
+                    onCheckedChange={handleSelectAll}
+                    id="select-all"
+                  />
+                  <label htmlFor="select-all" className="text-sm text-white">
+                    Select All
+                  </label>
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setIsImportModalOpen(true)}
-                >
-                  <Import className="mr-2 h-4 w-4" />
-                  Import URL
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setIsBulkModalOpen(true)}
-                >
-                  <Link2 className="mr-2 h-4 w-4" />
-                  Get Bulk Links
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    setIsNumListingModalOpen(true);
-                    handleCheckListings();
-                  }}
-                >
-                  <ClipboardList className="mr-2 h-4 w-4" />
-                  Check Listings
-                </Button>
+                {filteredResponse && (
+                  <div className="space-y-2">
+                    {filteredResponse.map((item) => (
+                      <div
+                        key={item.id}
+                        id={item.id}
+                        className="flex w-full items-center justify-between space-x-3 rounded-lg border border-border p-2 text-xl text-white hover:bg-accent hover:text-accent-foreground"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            checked={selectedItems.some((sel) => sel.id === item.id)}
+                            onCheckedChange={(checked) => handleItemSelect(item, checked)}
+                          />
+                          {item.image_urls && item.image_urls[0] && (
+                            <img
+                              src={`http://localhost:8000/static/${item.image_urls[0]}`}
+                              alt={item.name}
+                              className="h-10 w-10 rounded-full"
+                            />
+                          )}
+                          <span className="text-xl">{item.name}</span>
+                        </div>
+
+                        <div className="flex items-center justify-center space-x-2">
+                          <form onSubmit={handleEditPrice}>
+                            <div className="flex items-center space-x-1 rounded-md border border-input bg-background p-1 text-sm">
+                              <span>$</span>
+                              <input
+                                  type="number"
+                                  id={`price-${item.id}`}
+                                  name="price"
+                                  defaultValue={parseFloat(item.price).toFixed(2)}
+                                  step="0.01"
+                                  className="h-6 w-16 bg-background focus-visible:outline-none"
+                                />
+                              <button
+                                className="flex items-center space-x-2 rounded-sm bg-primary p-1 text-primary-foreground hover:bg-primary/90"
+                                type="submit"
+                                onClick={() => setSelectedItem(item)}
+                              >
+                                <BiSave className="mr-2 h-4 w-4" />
+                                Save
+                              </button>
+                            </div>
+                          </form>
+
+                          <Button variant="outlineInverse" onClick={() => handleEditClick(item)}>
+                            <CiEdit className="mr-2 h-4 w-4" />
+                            Edit
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </Card>
           </div>
-
-          <Card className="border-accent bg-card p-4 w-[100%]">
-            <h3 className="mb-4 text-lg font-semibold text-white">
-              Available Listings to Post
-            </h3>
-            <div className="mb-4 flex items-center justify-between">
-              <Input
-                placeholder="Search by name"
-                className="w-2/3"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={allSelected}
-                  onCheckedChange={handleSelectAll}
-                  id="select-all"
-                />
-                <label htmlFor="select-all" className="text-sm text-white">
-                  Select All
-                </label>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              {filteredResponse && (
-                <div className="space-y-2">
-                  {filteredResponse.map((item) => (
-                    <div
-                      key={item.id}
-                      id={item.id}
-                      className="flex w-full items-center justify-between space-x-3 rounded-lg border border-border p-2 text-xl text-white hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <Switch
-                          checked={selectedItems.some((sel) => sel.id === item.id)}
-                          onCheckedChange={(checked) => handleItemSelect(item, checked)}
-                        />
-                        {item.image_urls && item.image_urls[0] && (
-                          <img
-                            src={`http://localhost:8000/static/${item.image_urls[0]}`}
-                            alt={item.name}
-                            className="h-10 w-10 rounded-full"
-                          />
-                        )}
-                        <span className="text-xl">{item.name}</span>
-                      </div>
-
-                      <div className="flex items-center justify-center space-x-2">
-                        <form onSubmit={handleEditPrice}>
-                          <div className="flex items-center space-x-1 rounded-md border border-input bg-background p-1 text-sm">
-                            <span>$</span>
-                            <input
-                                type="number"
-                                id={`price-${item.id}`}
-                                name="price"
-                                defaultValue={parseFloat(item.price).toFixed(2)}
-                                step="0.01"
-                                className="h-6 w-16 bg-background focus-visible:outline-none"
-                              />
-                            <button
-                              className="flex items-center space-x-2 rounded-sm bg-primary p-1 text-primary-foreground hover:bg-primary/90"
-                              type="submit"
-                              onClick={() => setSelectedItem(item)}
-                            >
-                              <BiSave className="mr-2 h-4 w-4" />
-                              Save
-                            </button>
-                          </div>
-                        </form>
-
-                        <Button variant="outlineInverse" onClick={() => handleEditClick(item)}>
-                          <CiEdit className="mr-2 h-4 w-4" />
-                          Edit
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </Card>
         </div>
-      </div>
       ))}
       
       <div className="mt-8 flex justify-end">
@@ -1456,7 +1506,7 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
               onSubmit={handleCustomListingSubmit}
               className="overflow-auto"
             >
-              <div className="mb-4">
+              <div className="mb-4" id="image">
                 <label className="block font-medium text-white/60">Current Image:</label>
                 {photoPreview && (
                   <img
@@ -1488,39 +1538,21 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                 </div>
               </div>
 
-              <div className="mb-4">
+              <div className="mb-4" id="name">
                 <label htmlFor="custom-name" className="block font-medium text-white/60">
                   Name:
                 </label>
                 <Input type="text" id="custom-name" name="name" required />
               </div>
 
-              <div className="mb-4">
+              <div className="mb-4" id="price">
                 <label htmlFor="custom-price" className="block font-medium text-white/60">
                   Price:
                 </label>
                 <Input type="number" id="custom-price" name="price" step="0.01" min="10" required />
               </div>
 
-              <div className="mb-4">
-                <label
-                  htmlFor="custom-delivery-price"
-                  className="block font-medium text-white/60"
-                >
-                  Shipping fee:
-                </label>
-                <Input
-                  type="number"
-                  id="custom-delivery-price"
-                  name="shipping_fee"
-                  step="0.01"
-                  defaultValue="0"
-                  required
-                  min="10"
-                />
-              </div>
-
-              <div className="mb-4">
+              <div className="mb-4" id="description">
                 <label
                   htmlFor="custom-description"
                   className="block font-medium text-white/60"
@@ -1530,75 +1562,46 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                 <Textarea id="custom-description" name="description" required />
               </div>
 
-              <div className="mb-4 grid grid-cols-2 gap-4">
-                <div>
-                  <label
-                    htmlFor="custom-shipping-within-days"
-                    className="block font-medium text-white/60"
-                  >
-                    Shipping in days:
-                  </label>
-                  <Input
-                    type="number"
-                    id="custom-shipping-within-days"
-                    name="shipping_within_days"
-                    defaultValue="3"
-                    min="1"
-                    required
-                  />
+              {/* <div id="shipping & expire">
+
+                <div className="mb-4 grid grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      htmlFor="custom-shipping-within-days"
+                      className="block font-medium text-white/60"
+                    >
+                      Shipping in days:
+                    </label>
+                    <Input
+                      type="number"
+                      id="custom-shipping-within-days"
+                      name="shipping_within_days"
+                      defaultValue="3"
+                      min="1"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="custom-expire-in-days"
+                      className="block font-medium text-white/60"
+                    >
+                      Expire in days:
+                    </label>
+                    <Input
+                      type="number"
+                      id="custom-expire-in-days"
+                      name="expire_in_days"
+                      defaultValue="7"
+                      min="3"
+                      required
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label
-                    htmlFor="custom-expire-in-days"
-                    className="block font-medium text-white/60"
-                  >
-                    Expire in days:
-                  </label>
-                  <Input
-                    type="number"
-                    id="custom-expire-in-days"
-                    name="expire_in_days"
-                    defaultValue="7"
-                    min="3"
-                    required
-                  />
-                </div>
+
               </div>
 
-              <div className="mb-4">
-                <label
-                  htmlFor="custom_shipping_paid_by"
-                  className="block font-medium text-white/60"
-                >
-                  Shipping Paid by:
-                </label>
-                <Select id="custom_shipping_paid_by" name="shipping_paid_by" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Shipping Paid by..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="buyer">Buyer</SelectItem>
-                    <SelectItem value="seller">Seller</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="mb-4">
-                <label htmlFor="custom_visibility" className="block font-medium text-white/60">
-                  Visibility:
-                </label>
-                <Select id="custom_visibility" name="visibility" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Visibility" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="public">Public</SelectItem>
-                    <SelectItem value="private">Private</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="mb-4">
+              <div className="mb-4" id="category">
                 <label htmlFor="custom-category" className="block font-medium text-white/60">
                   Category:
                 </label>
@@ -1623,7 +1626,7 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                 </Select>
               </div>
 
-              <div className="mb-4">
+              <div className="mb-4" id="digital method">
                 <label htmlFor="Digital Method" className="block font-medium text-white/60">
                   Digital Method:
                 </label>
@@ -1691,58 +1694,7 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                     Add Tag
                   </Button>
                 </div>
-              </div>
-
-              <div className="mb-4">
-                <label className="block font-medium text-gray-700">Tags:</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-sm">ID:</label>
-                    <Input
-                      type="text"
-                      placeholder="Other"
-                      value={tagInputs.id}
-                      onChange={(e) =>
-                        setTagInputs((prev) => ({ ...prev, id: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm">Type:</label>
-                    <Input
-                      type="text"
-                      placeholder="Other"
-                      value={tagInputs.type}
-                      onChange={(e) =>
-                        setTagInputs((prev) => ({ ...prev, type: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm">Mode:</label>
-                    <Input
-                      type="text"
-                      placeholder="Save the World"
-                      value={tagInputs.mode}
-                      onChange={(e) =>
-                        setTagInputs((prev) => ({ ...prev, mode: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm">Platform:</label>
-                    <Input
-                      type="text"
-                      placeholder="Epic Games"
-                      value={tagInputs.platform}
-                      onChange={(e) =>
-                        setTagInputs((prev) => ({ ...prev, platform: e.target.value }))
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
+              </div> */}
 
               <ModalFooter>
                 <Button onClick={() => setIsCustomModalOpen(false)} variant="outline">
@@ -1751,7 +1703,7 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                 <Button
                   type="submit"
                   variant="secondary"
-                  disabled={isUploading || isPostingCustom || tags.length === 0 || uploadedImageUrl === null}
+                  disabled={isUploading || isPostingCustom || uploadedImageUrl === null}
                   className={isPostingCustom ? "bg-destructive/70" : ""}
                 >
                   {isUploading ? (
@@ -1838,6 +1790,19 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                   defaultValue={selectedItem?.shipping_fee}
                   step="0.01"
                   min="0"
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="upc" className="block font-medium text-white/60">
+                  UPC:
+                </label>
+                <Input
+                  type="text"
+                  id="upc"
+                  name="upc"
+                  defaultValue={selectedItem?.upc}
                   required
                 />
               </div>
@@ -1985,6 +1950,40 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                   </SelectContent>
                 </Select>
               </div>
+{/* 
+              <div className="mb-4 flex flex-col items-center gap-4">
+                <label
+                    htmlFor="shipping-within-days"
+                  className="block font-medium text-white/60 text-left"
+                >
+                  Tag 1:
+                </label>
+                <div className="flex items-center justify-center gap-2">
+                  <Input
+                    type="number"
+                    id="id"
+                    name="shipping_within_days"
+                    defaultValue={selectedItem?.tag[0].id}
+                    min="1"
+                    required
+                  />
+                  <Input
+                    type="number"
+                    id="id-value"
+                    name="expire_in_days"
+                    defaultValue={selectedItem?.tag[0].other}
+                    min="3"
+                    required
+                  />
+                </div>
+              </div> */}
+
+              <div className="mb-4">
+                <StructuredTagInput 
+                  selectedItem={selectedItem} 
+                  onTagsChange={handleTagChange} 
+                />
+              </div>
 
               <ModalFooter>
                 <Button onClick={() => setIsEditModalOpen(false)} variant="outline">
@@ -2009,7 +2008,30 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
             className="flex items-center justify-center text-md text-md underline flex-col mx-auto w-full"
             dangerouslySetInnerHTML={{ __html: alertMessage }}
           />
-          <DialogFooter>
+          <DialogFooter className="flex flex-row items-center justify-between sm:justify-between">
+          <div className="flex gap-2">
+            {customUrl.length > 0 && (
+                  <Button
+                    onClick={copyCustomLinks}
+                    variant="secondary"
+                    size="sm"
+                    className="flex items-center gap-1"
+                    disabled={copied}
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="h-4 w-4" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4" />
+                        Copy All
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             <Button onClick={() => setAlertModal(false)} variant="outline">
               Close
             </Button>

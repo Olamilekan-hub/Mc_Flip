@@ -100,6 +100,7 @@ export function SettingsPage() {
                       id="listingTime"
                       type="number"
                       min="5"
+                      defaultValue={10}
                       value={timeBetweenListings}
                       onChange={(e) => setTimeBetweenListings(Number(e.target.value))}
                       className="bg-background border-primary/20"
@@ -113,6 +114,7 @@ export function SettingsPage() {
                       id="deleteTime"
                       type="number"
                       min="1"
+                      defaultValue={10}
                       value={deleteListingsHours}
                       onChange={(e) => setDeleteListingsHours(Number(e.target.value))}
                       className="bg-background border-primary/20"
@@ -135,6 +137,7 @@ export function SettingsPage() {
                   <Input
                     id="apiSecret"
                     type="text"
+                    placeholder="input your API Secret"
                     value={apiSecret}
                     onChange={(e) => setApiSecret(e.target.value)}
                     className="font-mono bg-background border-primary/20"
@@ -147,6 +150,7 @@ export function SettingsPage() {
                   <Input
                     id="apiKey"
                     type="text"
+                    placeholder="input your API Key"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     className="font-mono bg-background border-primary/20"
