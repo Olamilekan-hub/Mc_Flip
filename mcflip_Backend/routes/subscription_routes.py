@@ -58,11 +58,9 @@ class SubscriptionManager:
                 break
         if existing_key:
             current_sub = cls._subscriptions[existing_key]
-            # If still active, extend; otherwise start fresh
-            if current_sub['expires_at'] > datetime.now():
-                new_expires = current_sub['expires_at'] + duration
-            else:
-                new_expires = datetime.now() + duration
+            # Always add the extension duration to the current expiration date,
+            # regardless of whether it has expired or not.
+            new_expires = current_sub['expires_at'] + duration
             current_sub['expires_at'] = new_expires
             return {
                 'subscription_key': existing_key,

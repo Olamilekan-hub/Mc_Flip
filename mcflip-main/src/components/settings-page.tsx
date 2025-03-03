@@ -3,6 +3,13 @@
 import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { LogOut } from "lucide-react";
 import { db } from "~/lib/firebase"; // Ensure Firebase is initialized
@@ -15,13 +22,24 @@ export function SettingsPage() {
 
   const { data: session, status } = useSession();
   const USER_ID = session?.user?.id;
-  // console.log(USER_ID)
 
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [timeBetweenListings, setTimeBetweenListings] = useState<number>();
   const [deleteListingsHours, setDeleteListingsHours] = useState<number>();
   const [loading, setLoading] = useState(false);
+  // show alert state
+    const [alertModal, setAlertModal] = useState<boolean>(false);
+    const [alertMessage, setAlertMessage] = useState<string>("");
+
+  const showAlert = (message: string) => {
+    setAlertMessage(message);
+    setAlertModal(true);
+    setTimeout(() => {
+      setAlertModal(false);
+      setAlertMessage("");
+    }, 60000); // 1 minute
+  };
 
   interface UserData {
     apiKey?: string;
@@ -72,10 +90,10 @@ export function SettingsPage() {
     try {
       const docRef = doc(db, "users", USER_ID);
       await setDoc(docRef, { apiKey, apiSecret, deleteListingsHours,timeBetweenListings }, { merge: true });
-      alert("API Keys and Timing updated successfully!");
+      showAlert("API Keys and Timing updated successfully!");
     } catch (error) {
       console.error("Error saving API keys and Timing:", error);
-      alert("Failed to save API keys.");
+      showAlert("Failed to save API keys.");
     } finally {
       setLoading(false);
     }
@@ -169,13 +187,31 @@ export function SettingsPage() {
             >
               {loading ? "Saving..." : "Save Settings"}
             </Button>
-            <Button variant="ghost" size="sm" className="text-primary hover:text-primary/90">
-              <LogOut className="mr-2 h-4 w-4" onClick={() => signOut( )} />
+            <Button variant="ghost" size="sm" className="text-primary hover:text-primary/90" onClick={() => signOut()}>
+              <LogOut className="mr-2 h-4 w-4" />
               Logout
             </Button>
           </div>
         </div>
       </div>
+
+        {/* Alert Modal updated to use alertMessage */}
+      <Dialog open={alertModal} onOpenChange={setAlertModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ALERT!</DialogTitle>
+          </DialogHeader>
+          <div
+            className="flex items-center justify-center text-md text-md underline flex-col mx-auto w-full"
+            dangerouslySetInnerHTML={{ __html: alertMessage }}
+          />
+          <DialogFooter className="flex flex-row items-center justify-between sm:justify-between">
+          <Button onClick={() => setAlertModal(false)} variant="outline">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useEffect, useState, ChangeEvent } from "react";
+import React, { useEffect, useState, useRef, ChangeEvent } from "react";
 import axios from "axios";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useSession } from "next-auth/react";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { collection, doc, setDoc, getDocs, getDoc, updateDoc } from "firebase/firestore";
-import { db, storage } from "../lib/firebase"; 
+// import { getDownloadURL } from "firebase/storage";
+import { collection, doc, setDoc, getDocs, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
+import { db } from "../lib/firebase"; 
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
@@ -50,7 +50,6 @@ import { CiEdit } from "react-icons/ci";
 import { BiSave } from "react-icons/bi";
 import { BiLoaderCircle } from "react-icons/bi";
 import { FaAngleDoubleDown } from "react-icons/fa";
-import { object } from "zod";
 
 interface Listing {
   id: string;
@@ -99,9 +98,7 @@ export function ListingManager() {
   const [apiKey, setApiKey] = useState<string>("");
   const [apiSecret, setApiSecret] = useState<string>("");
 
-  
-  // If your code or UI references these, you may keep them. 
-  // Below variables are used in effect to avoid runtime errors:
+  // Basic configuration states
   const [timeBetweenListings, setTimeBetweenListings] = useState<number>(0);
   const [deleteListingsHours, setDeleteListingsHours] = useState<number>(0);
 
@@ -113,7 +110,7 @@ export function ListingManager() {
     subscription_key: string;
     expires_at: any;
     subStatus: string;
-  } | null>(null);
+  } | null>();
 
   // Local state for subscription countdown
   const [timeRemaining, setTimeRemaining] = useState<string>("");
@@ -141,6 +138,7 @@ export function ListingManager() {
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [isPostingCustom, setIsPostingCustom] = useState<boolean>(false);
+  const [saving, setSaving] = useState<boolean>(false);
 
   // Additional states
   const [importUrls, setImportUrls] = useState<string>("");
@@ -167,12 +165,92 @@ export function ListingManager() {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
+  const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null);
+  const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null);
+  const [editUploadedImageUrl, setEditUploadedImageUrl] = useState<string | null>(null);
+  const [isEditUploading, setIsEditUploading] = useState<boolean>(false);
+
   // For custom listing tags
   const [tags, setTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState<string[]>([]);
   
 
   // For editing a single listing
   const [selectedItem, setSelectedItem] = useState<Listing | null>(null);
+
+  // New flag to ensure we load the persisted state before persisting new changes.
+  const [stateInitialized, setStateInitialized] = useState<boolean>(false);
+  const lastPersistedStateRef = useRef<any>(null);
+
+  // for loading page
+  const [load, setLoad] = useState<boolean>(false);
+
+  // Subscription: Read state from Firestore once userID is available.
+  useEffect(() => {
+    if (!userID) return;
+    const stateDocRef = doc(db, "users", userID, "listingManagerState", "state");
+    const unsubscribe = onSnapshot(stateDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const remoteState = docSnap.data();
+        // Update local state if the remote value differs from our local value.
+        if (remoteState.load !== undefined && JSON.stringify(remoteState.load) !== JSON.stringify(load)) {
+          setLoad(remoteState.load);
+        }
+        if (remoteState.searchQuery !== undefined && JSON.stringify(remoteState.searchQuery) !== JSON.stringify(searchQuery)) {
+          setSearchQuery(remoteState.searchQuery);
+        }
+        if (remoteState.selectedItems && JSON.stringify(remoteState.selectedItems) !== JSON.stringify(selectedItems)) {
+          setSelectedItems(remoteState.selectedItems);
+        }
+        if (remoteState.isPosting !== undefined && JSON.stringify(remoteState.isPosting) !== JSON.stringify(isPosting)) {
+          setIsPosting(remoteState.isPosting);
+        }
+        if (remoteState.isProcessing !== undefined && JSON.stringify(remoteState.isProcessing) !== JSON.stringify(isProcessing)) {
+          setIsProcessing(remoteState.isProcessing);
+        }
+        if (remoteState.isDeleting !== undefined && JSON.stringify(remoteState.isDeleting) !== JSON.stringify(isDeleting)) {
+          setIsDeleting(remoteState.isDeleting);
+        }
+        // Mark state as initialized after the first load.
+        if (!stateInitialized) {
+          setStateInitialized(true);
+          lastPersistedStateRef.current = remoteState;
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [userID]); // Only depends on userID
+
+  // Persist state only after it has been initialized to prevent overwriting with defaults.
+  const persistManagerState = async () => {
+    if (!userID || !stateInitialized) return;
+    const stateDocRef = doc(db, "users", userID, "listingManagerState", "state");
+    const newState = {
+      load,
+      searchQuery,
+      selectedItems,
+      isPosting,
+      isProcessing,
+      isDeleting,
+    };
+    // Only persist if newState is different from the last persisted state.
+    if (JSON.stringify(newState) === JSON.stringify(lastPersistedStateRef.current)) {
+      return;
+    }
+    try {
+      await setDoc(stateDocRef, newState, { merge: true });
+      lastPersistedStateRef.current = newState;
+    } catch (error) {
+      console.error("Error persisting manager state:", error);
+    }
+  };
+
+  // Persist state on changes.
+  useEffect(() => {
+    (async () => {
+      await persistManagerState();
+    })();
+  }, [load, searchQuery, selectedItems, isPosting, isProcessing, isDeleting]);
 
   // --------------------------
   // Fetch subscription details from Firestore
@@ -214,8 +292,7 @@ export function ListingManager() {
     if (selectedItem?.tags) {
       setFormTags(selectedItem.tags);
     }
-    console.log("tag", tagInputs);
-  }, [status, userID, subscriptionDetails, selectedItem, tagInputs]);
+  }, [status, userID, subscriptionDetails, selectedItem]);
 
   // --------------------------
   // Countdown timer effect that updates subStatus and saves it to Firestore
@@ -305,6 +382,10 @@ export function ListingManager() {
           console.error("Error fetching API keys:", error);
         });
 
+        // All data fetched, now mark load as complete and persist state
+        setLoad(true);
+        await persistManagerState();
+
         // Reset tags and preview if the custom modal was closed
         if (!isCustomModalOpen) {
           setTags([]);
@@ -313,7 +394,10 @@ export function ListingManager() {
       }
     };
 
-    fetchData();
+    fetchData().catch((error) => {
+      console.error("Error fetching data:", error);
+    });
+    // setLoad(true);
   }, [status, userID, isCustomModalOpen]);
 
   // --------------
@@ -447,7 +531,7 @@ export function ListingManager() {
           category: listing.category ?? "DIGITAL_INGAME",
           platform: listing.platform ?? "unknown",
           upc: listing.upc ?? "",
-          price: Number(listing.price) ?? 0,
+          price: (Number(listing.price) ?? 0) * 100,
           accept_currency: listing.accept_currency ?? "USD",
           shipping_within_days: listing.shipping_within_days ?? 3,
           expire_in_days: listing.expire_in_days ?? 7,
@@ -805,6 +889,55 @@ export function ListingManager() {
     }
   };
 
+  const handleEditPhotoChange = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setEditPhotoFile(file);
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (reader.result) {
+          setEditPhotoPreview(reader.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setEditPhotoFile(null);
+      setEditPhotoPreview(null);
+    }
+  };
+
+  const uploadEditImage = async (): Promise<void> => {
+    if (!editPhotoFile) {
+      showAlert("No image file selected for editing!");
+      return;
+    }
+    setIsEditUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", editPhotoFile);
+      formData.append("upload_preset", "mcflipnew");
+      const cloudName = "dary9svzu";
+      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+      const response = await fetch(cloudinaryUrl, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (data.secure_url) {
+        setEditUploadedImageUrl(data.secure_url);
+        showAlert("Edit image uploaded successfully!");
+      } else {
+        console.error("Cloudinary upload error:", data);
+        showAlert("Failed to upload edit image!");
+      }
+    } catch (error) {
+      console.error("Error uploading edit image:", error);
+      showAlert("Edit image upload failed.");
+    } finally {
+      setIsEditUploading(false);
+    }
+  };
+
   // --------------
   // Prepare and post a single custom listing
   // --------------
@@ -937,8 +1070,6 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
     }
 };
 
-  
-
   // --------------
   // Editing existing Firestore listing
   // --------------
@@ -947,6 +1078,7 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
     event: React.FormEvent<HTMLFormElement>
   ): Promise<void> => {
     event.preventDefault();
+    setSaving(true)
     if (!selectedItem) {
       showAlert("No item selected!");
       return;
@@ -984,22 +1116,33 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
 
       await updateDoc(allListingsRef, { listings: updatedListings });
       showAlert("Price updated successfully!");
+      setSaving(false)
       await fetchListings(userID);
     } catch (error: any) {
       console.error("Error updating Price:", error);
       showAlert(error.message);
+    } finally {
     }
   };
 
   const handleEditClick = (item: Listing): void => {
     setSelectedItem(item);
-    // Initialize tags from the selected item if available
     if (item.tags && Array.isArray(item.tags)) {
       setListingTags(item.tags);
     } else {
       setListingTags([]);
     }
+    // Reset edit modal image states when opening the modal
+    setEditPhotoFile(null);
+    setEditPhotoPreview(null);
+    setEditUploadedImageUrl(null);
     setIsEditModalOpen(true);
+  };
+
+  const handleModalClose = (): void => {
+    setIsEditModalOpen(false);
+    setSelectedItem(null);
+    setListingTags([]);
   };
 
   const handleEditSubmit = async (
@@ -1013,18 +1156,21 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
       id: selectedItem.id,
       name: (event.currentTarget.name as any).value,
       price: parseFloat((event.currentTarget.price as any).value ?? "0"),
-      shipping_fee: parseFloat((event.currentTarget.shipping_fee as any).value ?? "0"),
       description: (event.currentTarget.description as any).value,
       upc: (event.currentTarget.upc as any).value,
       category: (event.currentTarget.category as any).value,
       digital_deliverable: (event.currentTarget.digital_deliverable as any).value,
-      shipping_paid_by: (event.currentTarget.shipping_paid_by as any).value,
-      expire_in_days: parseInt((event.currentTarget.expire_in_days as any).value) ?? 0,
-      shipping_within_days: parseInt((event.currentTarget.shipping_within_days as any).value) ?? 0,
+      // expire_in_days: parseInt((event.currentTarget.expire_in_days as any).value) ?? 0,
+      // shipping_within_days: parseInt((event.currentTarget.shipping_within_days as any).value) ?? 0,
       visibility: (event.currentTarget.visibility as any).value,
       kind: (event.currentTarget.kind as any).value,
-      tags: formTags, // Add the tags from state here
+      tags: newTag
     };
+
+    if (editUploadedImageUrl) {
+      updatedListing.image_urls = [editUploadedImageUrl, editUploadedImageUrl];
+      // updatedListing.selectedItem.photo[0].view_url = editUploadedImageUrl;
+    }
   
     try {
       const allListingsRef = doc(db, "users", userID, "importedListings", "allListings");
@@ -1042,13 +1188,18 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
       const updatedListings = listings.map((l) =>
         l.id === selectedItem.id ? { ...l, ...updatedListing } : l
       );
-  
-      await updateDoc(allListingsRef, { listings: updatedListings });
       
+      await updateDoc(allListingsRef, { listings: updatedListings });
+    
+      // Show success message BEFORE closing the modal
       showAlert("Listing updated successfully!");
-      setIsUpdating(false);
-      setIsEditModalOpen(false);
+      
+      // Fetch updated listings before closing the modal
       await fetchListings(userID);
+      
+      // Now close the modal and reset loading state
+      setIsUpdating(false);
+      handleModalClose();
     } catch (error: any) {
       console.error("Error updating listing:", error);
       showAlert(error.message);
@@ -1056,12 +1207,38 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
   };
   
   
-  // Handle input changes
+  // // Handle input changes
   const handleTagChange = (index, field, value) => {
     const updatedTags = [...tagInputs];
     updatedTags[index] = { ...updatedTags[index], [field]: value };
     setTagInputs(updatedTags);
   };
+
+  const handleDeleteListing = async () => {
+    if (!selectedItem) {
+      showAlert("No item selected!");
+      return;
+    }
+    try {
+      const allListingsRef = doc(db, "users", userID, "importedListings", "allListings");
+      const docSnap = await getDoc(allListingsRef);
+      if (!docSnap.exists()) {
+        showAlert("Listings data is missing. Please refresh the page.");
+        return;
+      }
+      const data = docSnap.data();
+      const listings: Listing[] = data.listings ?? [];
+      const updatedListings = listings.filter((l) => l.id !== selectedItem.id);
+      await updateDoc(allListingsRef, { listings: updatedListings });
+      showAlert("Listing deleted successfully!");
+      await fetchListings(userID);
+      handleModalClose();
+    } catch (error: any) {
+      console.error("Error deleting listing:", error);
+      showAlert(error.message);
+    }
+  };
+  
 
   // --------------
   // Render
@@ -1069,7 +1246,18 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
   return (
     <div className="dark min-h-screen bg-background py- text-foreground px-4 md:px-24 lg:px-60">
 
-      {subscriptionDetails && subscriptionDetails.subStatus !== "Active" ? (
+      {!load ? (
+      <div className="flex  items-center justify-center bg-background -z-1 mt-[10rem]">
+        <div className="flex flex-col items-center justify-center mx-auto">
+          <div className="lds-ripple flex items-center justify-center">
+            <div></div>
+            <div></div>
+          </div>
+          {/* <p className="mt-4 text-xl font-semibold text-white">Loading...</p> */}
+        </div>
+      </div>
+    ) : (
+      subscriptionDetails && subscriptionDetails.subStatus !== "Active" ? (
 
         <div className="mx-auto w-full bg-background text-foreground mt-[rem] flex flex-col items-center justify-center gap-5">
           <Card className="mb-4 p-4 w-full">
@@ -1103,7 +1291,7 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
           </Card>
         </div>
 
-       ) : (
+    ) : (
 
         apiKey === "" || apiSecret === "" ? (
           <div className="w-full flex flex-col justify-center">
@@ -1139,7 +1327,7 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
 
           </div>
 
-       ) : (
+    ) : (
 
         <div>
           <h2 className="mb-4 text-xl font-bold text-white">Create New Listing</h2>
@@ -1286,9 +1474,9 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                                 className="flex items-center space-x-2 rounded-sm bg-primary p-1 text-primary-foreground hover:bg-primary/90"
                                 type="submit"
                                 onClick={() => setSelectedItem(item)}
+                                disabled={saving}
                               >
-                                <BiSave className="mr-2 h-4 w-4" />
-                                Save
+                                <BiSave className="mr-2 h-4 w-4" />Save 
                               </button>
                             </div>
                           </form>
@@ -1306,13 +1494,15 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
             </Card>
           </div>
         </div>
-      ))}
+    )))}
       
+      {load ? 
       <div className="mt-8 flex justify-end">
         <Button variant="link" className="text-muted-foreground" onClick={() => signOut()}>
           Logout
         </Button>
       </div>
+      : "" }
 
       {/* Import Modal */}
       <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
@@ -1562,140 +1752,6 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                 <Textarea id="custom-description" name="description" required />
               </div>
 
-              {/* <div id="shipping & expire">
-
-                <div className="mb-4 grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      htmlFor="custom-shipping-within-days"
-                      className="block font-medium text-white/60"
-                    >
-                      Shipping in days:
-                    </label>
-                    <Input
-                      type="number"
-                      id="custom-shipping-within-days"
-                      name="shipping_within_days"
-                      defaultValue="3"
-                      min="1"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="custom-expire-in-days"
-                      className="block font-medium text-white/60"
-                    >
-                      Expire in days:
-                    </label>
-                    <Input
-                      type="number"
-                      id="custom-expire-in-days"
-                      name="expire_in_days"
-                      defaultValue="7"
-                      min="3"
-                      required
-                    />
-                  </div>
-                </div>
-
-              </div>
-
-              <div className="mb-4" id="category">
-                <label htmlFor="custom-category" className="block font-medium text-white/60">
-                  Category:
-                </label>
-                <Select id="custom-category" name="category" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a Category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="DIGITAL_INGAME">Digital In-Game</SelectItem>
-                    <SelectItem value="BLOCKCHAIN_NFT">Blockchain NFT</SelectItem>
-                    <SelectItem value="ACCOUNT">Account</SelectItem>
-                    <SelectItem value="TOYS_AND_GAMES">Toy and Games</SelectItem>
-                    <SelectItem value="VIDEO_GAME_ACCESSORIES">Video Game Accessories</SelectItem>
-                    <SelectItem value="VIDEO_GAME_HARDWARE">Video Game Hardware</SelectItem>
-                    <SelectItem value="CONSOLE_VIDEO_GAMES">Console Video Games</SelectItem>
-                    <SelectItem value="GIFTCARD">Gift Card</SelectItem>
-                    <SelectItem value="CREATIVE">Creative</SelectItem>
-                    <SelectItem value="KNOWLEDGE">Knowledge</SelectItem>
-                    <SelectItem value="BOOSTING">Boosting</SelectItem>
-                    <SelectItem value="FUN">Fun</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="mb-4" id="digital method">
-                <label htmlFor="Digital Method" className="block font-medium text-white/60">
-                  Digital Method:
-                </label>
-                <Select id="Digital Method" name="digital_deliverable"  required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Digital Method" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="code">Digital Code</SelectItem>
-                    <SelectItem value="transfer">Coordinated Transfer</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="mb-4">
-                <label htmlFor="custom-platform" className="block font-medium text-white/60">
-                  Platform:
-                </label>
-                <Select id="custom-platform" name="platform" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a Platform" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unknown">Unknown</SelectItem>
-                    <SelectItem value="pc">PC</SelectItem>
-                    <SelectItem value="ps4">PS4</SelectItem>
-                    <SelectItem value="ps5">PS5</SelectItem>
-                    <SelectItem value="xboxone">Xbox One</SelectItem>
-                    <SelectItem value="switch">Switch</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="mb-4">
-                <label htmlFor="custom-kind" className="block font-medium text-gray-700">
-                  Kind:
-                </label>
-                <Select id="custom-kind" name="kind" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a Kind" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="item">Item</SelectItem>
-                    <SelectItem value="gig">Gig</SelectItem>
-                    <SelectItem value="drop">Drop</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="mb-4">
-                <label className="block font-medium text-gray-700">Tags:</label>
-                <div className="flex min-h-[40px] flex-wrap gap-2 rounded-md p-2">
-                  {tags.map((tag, index) => (
-                    <span
-                      key={index}
-                      className="rounded bg-white/80 px-2 py-1 text-sm font-medium text-black"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-                <div className="mt-2 flex space-x-2">
-                  <Input type="text" id="custom-new-tag-input" placeholder="New tag" />
-                  <Button type="button" onClick={addTag}>
-                    Add Tag
-                  </Button>
-                </div>
-              </div> */}
-
               <ModalFooter>
                 <Button onClick={() => setIsCustomModalOpen(false)} variant="outline">
                   Cancel
@@ -1733,21 +1789,45 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
           <div className="space-y-4 overflow-auto">
             <form onSubmit={handleEditSubmit} className="overflow-auto">
 
-              <div className="mb-4">
+            <div className="mb-4">
                 <label className="block font-medium text-white/60">Current Image:</label>
-                {selectedItem?.photo && selectedItem.cover_photo !== undefined && (
-                  <img  
-                    src={selectedItem.photo[selectedItem.cover_photo].view_url}
-                    alt="Preview"
-                    className="mt-2 max-h-48 max-w-full rounded-md shadow" 
+                {editPhotoPreview ? (
+                  <img
+                    src={editPhotoPreview}
+                    alt="Edit Preview"
+                    className="mt-2 max-h-48 max-w-full rounded-md shadow"
                   />
+                ) : (
+                  selectedItem?.photo && selectedItem.cover_photo !== undefined && (
+                    <img  
+                      src={selectedItem.photo[selectedItem.cover_photo].view_url}
+                      alt="Preview"
+                      className="mt-2 max-h-48 max-w-full rounded-md shadow" 
+                    />
+                  )
                 )}
-                {/* <div className="mt-2">
-                  <label htmlFor="custom-photo" className="block font-medium text-white/60">
-                    Change Photo:
-                  </label>
-                  <Input type="file" id="custom-photo" name="photo" accept="image/*" />
-                </div> */}
+                <div className="mt-2 flex flex-row justify-center items-end gap-3">
+                  <div>
+                    <label htmlFor="edit-photo" className="block font-medium text-white/60">
+                      Change Photo:
+                    </label>
+                    <Input
+                      type="file"
+                      id="edit-photo"
+                      name="photo"
+                      accept="image/*"
+                      onChange={handleEditPhotoChange}
+                    />
+                  </div>
+                  <Button variant="default" onClick={uploadEditImage} disabled={isEditUploading}>
+                    {isEditUploading ? (
+                      <>
+                        <BiLoaderCircle className="inline-block mr-2 animate-spin" />
+                        Uploading Image
+                      </>
+                    ) : "Upload Image"}
+                  </Button>
+                </div>
               </div>
 
               <div className="mb-4">
@@ -1775,21 +1855,6 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                   defaultValue={parseFloat(selectedItem?.price).toFixed(2)}
                   step="0.01"
                   min="10"
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label htmlFor="shipping_fee" className="block font-medium text-white/60">
-                  Shipping Fee:
-                </label>
-                <Input
-                  type="number"
-                  id="shipping_fee"
-                  name="shipping_fee"
-                  defaultValue={selectedItem?.shipping_fee}
-                  step="0.01"
-                  min="0"
                   required
                 />
               </div>
@@ -1858,22 +1923,19 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
               </div>
 
               <div className="mb-4">
-                <label
-                  htmlFor="shipping_paid_by"
-                  className="block font-medium text-white/60"
-                >
+                <label htmlFor="shipping_paid_by" className="block font-medium text-white/60">
                   Shipping Paid by:
                 </label>
-                <Select id="shipping_paid_by" name="shipping_paid_by" defaultValue={selectedItem?.shipping_paid_by} required>
+                <Select id="shipping_paid_by" name="shipping_paid_by" defaultValue="seller" required >
                   <SelectTrigger>
                     <SelectValue placeholder="Shipping Paid by..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="buyer">Buyer</SelectItem>
                     <SelectItem value="seller">Seller</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
 
               <div className="mb-4">
                 <label htmlFor="visibility" className="block font-medium text-white/60">
@@ -1981,18 +2043,23 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
               <div className="mb-4">
                 <StructuredTagInput 
                   selectedItem={selectedItem} 
-                  onTagsChange={handleTagChange} 
+                  onTagsChange={handleTagChange}
+                  setNewTag={setNewTag}
                 />
               </div>
 
               <ModalFooter>
-                <Button onClick={() => setIsEditModalOpen(false)} variant="outline">
+                <Button onClick={handleDeleteListing} variant="destructive">
+                  Delete
+                </Button>
+                <Button onClick={() => handleModalClose()} variant="outline">
                   Cancel
                 </Button>
                 <Button type="submit" variant="secondary" disabled={isUpdating}>
-                  {!isUpdating ? "Save Changes" : "Updating Changes" }
+                  {!isUpdating ? "Save Changes" : "Updating Changes"}
                 </Button>
               </ModalFooter>
+
             </form>
           </div>
         </ModalContent>

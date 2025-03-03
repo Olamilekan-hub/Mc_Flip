@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "~/components/ui/dialog";
 import { db } from "~/lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useSession } from "next-auth/react";
@@ -13,13 +20,22 @@ export default function SubscriptionManagement() {
   const { data: session, status } = useSession();
   const USER_ID = session?.user?.id;
   const [subscriptionCode, setSubscriptionCode] = useState("");
-  const [subscriptionDetails, setSubscriptionDetails] = useState(null);
+  const [subscriptionDetails, setSubscriptionDetails] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  // For admin: duration in days (numeric input)
   const [durationDays, setDurationDays] = useState(7);
-  // Local state for the countdown display
   const [timeRemaining, setTimeRemaining] = useState("");
+  const [alertModal, setAlertModal] = useState<boolean>(false);
+  const [alertMessage, setAlertMessage] = useState<string>("");
+
+  const showAlert = (message: string) => {
+    setAlertMessage(message);
+    setAlertModal(true);
+    setTimeout(() => {
+      setAlertModal(false);
+      setAlertMessage("");
+    }, 60000); // 1 minute
+  };
 
   // Countdown timer effect – updates every second and saves "subStatus" to Firestore
   useEffect(() => {
@@ -28,17 +44,14 @@ export default function SubscriptionManagement() {
       interval = setInterval(() => {
         const expires = new Date(subscriptionDetails.expires_at);
         const now = new Date();
-        const diff = expires - now;
-        // Determine status based on time remaining
+        const diff = expires.getTime() - now.getTime();
         let newStatus;
         if (diff <= 0) {
           newStatus = "Expired";
           setTimeRemaining("Expired");
-          // Update Firestore only once when status changes to "Expired"
           if (!subscriptionDetails.subStatus || subscriptionDetails.subStatus !== "Expired") {
-            setSubscriptionDetails((prev) => ({ ...prev, subStatus: "Expired" }));
+            setSubscriptionDetails((prev: any) => ({ ...prev, subStatus: "Expired" }));
             const docRef = doc(db, "users", USER_ID);
-            // Do not await here to avoid blocking the timer
             setDoc(docRef, { subStatus: "Expired" }, { merge: true });
           }
           clearInterval(interval);
@@ -49,9 +62,8 @@ export default function SubscriptionManagement() {
           const minutes = Math.floor((diff / (1000 * 60)) % 60);
           const seconds = Math.floor((diff / 1000) % 60);
           setTimeRemaining(`${days}d ${hours}h ${minutes}m ${seconds}s`);
-          // Update Firestore if status is not "Active"
           if (!subscriptionDetails.subStatus || subscriptionDetails.subStatus !== "Active") {
-            setSubscriptionDetails((prev) => ({ ...prev, subStatus: "Active" }));
+            setSubscriptionDetails((prev: any) => ({ ...prev, subStatus: "Active" }));
             const docRef = doc(db, "users", USER_ID);
             setDoc(docRef, { subStatus: "Active" }, { merge: true });
           }
@@ -80,7 +92,9 @@ export default function SubscriptionManagement() {
       }
     };
     if (status === "authenticated" && USER_ID) {
-      fetchSubscription().catch(err => console.error(err));
+      fetchSubscription().catch((err) => {
+        // Error handling (if needed) without logging sensitive info to the console.
+      });
     }
   }, [status, USER_ID]);
 
@@ -95,7 +109,6 @@ export default function SubscriptionManagement() {
       };
       const response = await axios.post("http://localhost:8000/api/activate-subscription", payload);
       if (response.data && response.data.subscription_key) {
-        // Update local subscription details with subStatus "Active"
         const updatedSub = {
           subscription_key: response.data.subscription_key,
           expires_at: response.data.expires_at,
@@ -103,12 +116,8 @@ export default function SubscriptionManagement() {
         };
         setSubscriptionDetails(updatedSub);
         const docRef = doc(db, "users", USER_ID);
-        await setDoc(
-          docRef,
-          updatedSub,
-          { merge: true }
-        );
-        alert("Subscription activated successfully!");
+        await setDoc(docRef, updatedSub, { merge: true });
+        showAlert("Subscription activated successfully!");
 
         // For non-admin users, remove the used code from the admin's Firestore record
         if (USER_ID) {
@@ -117,17 +126,21 @@ export default function SubscriptionManagement() {
           if (adminSnap.exists() && adminSnap.data().generated_subscription_codes) {
             let codes = adminSnap.data().generated_subscription_codes;
             if (codes.includes(subscriptionCode)) {
-              codes = codes.filter(c => c !== subscriptionCode);
+              codes = codes.filter((c: string) => c !== subscriptionCode);
               await setDoc(adminDocRef, { generated_subscription_codes: codes }, { merge: true });
             }
           }
         }
       } else {
-        alert("Activation failed!");
+        showAlert("Activation failed!");
       }
-    } catch (error) {
-      console.error("Activation error", error);
-      alert("Subscription activation failed. " + error.response?.data?.detail);
+    } catch (error: any) {
+      // Instead of logging errors to the console, display them via the alert modal.
+      if (axios.isAxiosError(error) && error.response?.data?.detail) {
+        showAlert("Subscription activation failed, " + error.response.data.detail + ".");
+      } else {
+        showAlert("Subscription activation failed.");
+      }
     } finally {
       setLoading(false);
     }
@@ -137,14 +150,12 @@ export default function SubscriptionManagement() {
   const handleGenerateCode = async () => {
     setGenerating(true);
     try {
-      // Call the backend endpoint with the admin's token and duration in days (as a string)
       const response = await axios.get("http://localhost:8000/api/generate-subscription-code", {
         params: { user_token: USER_ID, duration: durationDays.toString() }
       });
       if (response.data && response.data.subscription_code) {
         const generatedCode = response.data.subscription_code;
         setSubscriptionCode(generatedCode);
-        // Also store the generated code in the admin's Firestore document
         const adminDocRef = doc(db, "users", USER_ID);
         const adminSnap = await getDoc(adminDocRef);
         let codes = [];
@@ -153,11 +164,10 @@ export default function SubscriptionManagement() {
         }
         codes.push(generatedCode);
         await setDoc(adminDocRef, { generated_subscription_codes: codes }, { merge: true });
-        alert("Generated subscription code: " + generatedCode);
+        showAlert("Generated subscription code: " + generatedCode);
       }
     } catch (error) {
-      console.error("Error generating code", error);
-      alert("Failed to generate code");
+      showAlert("Failed to generate code");
     } finally {
       setGenerating(false);
     }
@@ -232,6 +242,23 @@ export default function SubscriptionManagement() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={alertModal} onOpenChange={setAlertModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ALERT!</DialogTitle>
+          </DialogHeader>
+          <div
+            className="flex items-center justify-center text-md flex-col mx-auto w-full"
+            dangerouslySetInnerHTML={{ __html: alertMessage }}
+          />
+          <DialogFooter className="flex flex-row items-center justify-between sm:justify-between">
+            <Button onClick={() => setAlertModal(false)} variant="outline">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
