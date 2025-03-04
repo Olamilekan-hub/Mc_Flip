@@ -17,20 +17,19 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { signOut } from "next-auth/react";
 import { useSession } from "next-auth/react";
 
-
 export function SettingsPage() {
-
   const { data: session, status } = useSession();
   const USER_ID = session?.user?.id;
 
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
-  const [timeBetweenListings, setTimeBetweenListings] = useState<number>();
-  const [deleteListingsHours, setDeleteListingsHours] = useState<number>();
+  // Initialize numeric states with default values to keep inputs controlled
+  const [timeBetweenListings, setTimeBetweenListings] = useState<number>(5);
+  const [deleteListingsHours, setDeleteListingsHours] = useState<number>(1);
   const [loading, setLoading] = useState(false);
   // show alert state
-    const [alertModal, setAlertModal] = useState<boolean>(false);
-    const [alertMessage, setAlertMessage] = useState<string>("");
+  const [alertModal, setAlertModal] = useState<boolean>(false);
+  const [alertMessage, setAlertMessage] = useState<string>("");
 
   const showAlert = (message: string) => {
     setAlertMessage(message);
@@ -47,7 +46,7 @@ export function SettingsPage() {
     timeBetweenListings?: number;
     deleteListingsHours?: number;
   }
-  
+
   // Fetch API Keys from Firestore
   useEffect(() => {
     const fetchApiKeys = async () => {
@@ -57,15 +56,15 @@ export function SettingsPage() {
         const data = docSnap.data() as UserData; // Cast to your defined type
         setApiKey(typeof data.apiKey === "string" ? data.apiKey : "");
         setApiSecret(typeof data.apiSecret === "string" ? data.apiSecret : "");
-  
+
         const updateData: Partial<UserData> = {};
-        if (!data.timeBetweenListings) {
+        if (data.timeBetweenListings === undefined || data.timeBetweenListings === null) {
           setTimeBetweenListings(5);
           updateData.timeBetweenListings = 5;
         } else {
           setTimeBetweenListings(data.timeBetweenListings);
         }
-        if (!data.deleteListingsHours) {
+        if (data.deleteListingsHours === undefined || data.deleteListingsHours === null) {
           setDeleteListingsHours(1);
           updateData.deleteListingsHours = 1;
         } else {
@@ -76,20 +75,24 @@ export function SettingsPage() {
         }
       }
     };
-  
+
     if (status === "authenticated" && USER_ID) {
       fetchApiKeys().catch((error) => {
         console.error("Error fetching API keys and Timing:", error);
       });
     }
   }, [status, USER_ID]);
-  
-   // Save API Keys to Firestore
+
+  // Save API Keys to Firestore
   const handleSave = async () => {
     setLoading(true);
     try {
       const docRef = doc(db, "users", USER_ID);
-      await setDoc(docRef, { apiKey, apiSecret, deleteListingsHours,timeBetweenListings }, { merge: true });
+      await setDoc(
+        docRef,
+        { apiKey, apiSecret, deleteListingsHours, timeBetweenListings },
+        { merge: true }
+      );
       showAlert("API Keys and Timing updated successfully!");
     } catch (error) {
       console.error("Error saving API keys and Timing:", error);
@@ -118,7 +121,6 @@ export function SettingsPage() {
                       id="listingTime"
                       type="number"
                       min="5"
-                      defaultValue={10}
                       value={timeBetweenListings}
                       onChange={(e) => setTimeBetweenListings(Number(e.target.value))}
                       className="bg-background border-primary/20"
@@ -132,7 +134,6 @@ export function SettingsPage() {
                       id="deleteTime"
                       type="number"
                       min="1"
-                      defaultValue={10}
                       value={deleteListingsHours}
                       onChange={(e) => setDeleteListingsHours(Number(e.target.value))}
                       className="bg-background border-primary/20"
@@ -187,7 +188,12 @@ export function SettingsPage() {
             >
               {loading ? "Saving..." : "Save Settings"}
             </Button>
-            <Button variant="ghost" size="sm" className="text-primary hover:text-primary/90" onClick={() => signOut()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-primary hover:text-primary/90"
+              onClick={() => signOut()}
+            >
               <LogOut className="mr-2 h-4 w-4" />
               Logout
             </Button>
@@ -195,23 +201,23 @@ export function SettingsPage() {
         </div>
       </div>
 
-        {/* Alert Modal updated to use alertMessage */}
+      {/* Alert Modal */}
       <Dialog open={alertModal} onOpenChange={setAlertModal}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>ALERT!</DialogTitle>
           </DialogHeader>
           <div
-            className="flex items-center justify-center text-md text-md underline flex-col mx-auto w-full"
+            className="flex items-center justify-center text-md underline flex-col mx-auto w-full"
             dangerouslySetInnerHTML={{ __html: alertMessage }}
           />
           <DialogFooter className="flex flex-row items-center justify-between sm:justify-between">
-          <Button onClick={() => setAlertModal(false)} variant="outline">
+            <Button onClick={() => setAlertModal(false)} variant="outline">
               Close
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

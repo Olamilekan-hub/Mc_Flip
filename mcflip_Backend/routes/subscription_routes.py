@@ -56,16 +56,15 @@ class SubscriptionManager:
             if sub['user_token'] == user_token:
                 existing_key = key
                 break
-        if existing_key:
-            current_sub = cls._subscriptions[existing_key]
-            # Always add the extension duration to the current expiration date,
-            # regardless of whether it has expired or not.
-            new_expires = current_sub['expires_at'] + duration
-            current_sub['expires_at'] = new_expires
-            return {
-                'subscription_key': existing_key,
-                'expires_at': new_expires,
-                'time_remaining': str(new_expires - datetime.now())
+                if existing_key:
+                    current_sub = cls._subscriptions[existing_key]
+                    base_time = datetime.now() if current_sub['expires_at'] < datetime.now() else current_sub['expires_at']
+                    new_expires = base_time + duration
+                    current_sub['expires_at'] = new_expires
+                return {
+                    'subscription_key': existing_key,
+                    'expires_at': new_expires,
+                    'time_remaining': str(new_expires - datetime.now())
             }
         else:
             sub_key = cls.generate_subscription_key()

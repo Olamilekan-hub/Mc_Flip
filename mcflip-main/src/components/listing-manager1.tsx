@@ -185,6 +185,15 @@ export function ListingManager() {
   // for loading page
   const [load, setLoad] = useState<boolean>(false);
 
+  // NEW: Only decide to show the page when:
+  // 1. load is true (i.e. fetchData is done)
+  // 2. subscriptionDetails is not null AND
+  //    either the subscription is not active OR (if active) both API keys are provided.
+  const isPageDecided =
+    load &&
+    subscriptionDetails !== null &&
+    (subscriptionDetails.subStatus !== "Active" || (apiKey !== "" && apiSecret !== ""));
+
   // Subscription: Read state from Firestore once userID is available.
   useEffect(() => {
     if (!userID) return;
@@ -193,9 +202,9 @@ export function ListingManager() {
       if (docSnap.exists()) {
         const remoteState = docSnap.data();
         // Update local state if the remote value differs from our local value.
-        if (remoteState.load !== undefined && JSON.stringify(remoteState.load) !== JSON.stringify(load)) {
-          setLoad(remoteState.load);
-        }
+        // if (remoteState.load !== undefined && JSON.stringify(remoteState.load) !== JSON.stringify(load)) {
+        //   setLoad(remoteState.load);
+        // }
         if (remoteState.searchQuery !== undefined && JSON.stringify(remoteState.searchQuery) !== JSON.stringify(searchQuery)) {
           setSearchQuery(remoteState.searchQuery);
         }
@@ -205,9 +214,9 @@ export function ListingManager() {
         if (remoteState.isPosting !== undefined && JSON.stringify(remoteState.isPosting) !== JSON.stringify(isPosting)) {
           setIsPosting(remoteState.isPosting);
         }
-        if (remoteState.isProcessing !== undefined && JSON.stringify(remoteState.isProcessing) !== JSON.stringify(isProcessing)) {
-          setIsProcessing(remoteState.isProcessing);
-        }
+        // if (remoteState.isProcessing !== undefined && JSON.stringify(remoteState.isProcessing) !== JSON.stringify(isProcessing)) {
+        //   setIsProcessing(remoteState.isProcessing);
+        // }
         if (remoteState.isDeleting !== undefined && JSON.stringify(remoteState.isDeleting) !== JSON.stringify(isDeleting)) {
           setIsDeleting(remoteState.isDeleting);
         }
@@ -226,11 +235,8 @@ export function ListingManager() {
     if (!userID || !stateInitialized) return;
     const stateDocRef = doc(db, "users", userID, "listingManagerState", "state");
     const newState = {
-      load,
-      searchQuery,
       selectedItems,
       isPosting,
-      isProcessing,
       isDeleting,
     };
     // Only persist if newState is different from the last persisted state.
@@ -279,7 +285,7 @@ export function ListingManager() {
             updateData = subscriptionDetails;
           }
           if (updateData) {
-            await setDoc(docRef, updateData, {merge: true});
+            await setDoc(docRef, updateData, { merge: true });
           }
         }
       }
@@ -397,7 +403,6 @@ export function ListingManager() {
     fetchData().catch((error) => {
       console.error("Error fetching data:", error);
     });
-    // setLoad(true);
   }, [status, userID, isCustomModalOpen]);
 
   // --------------
@@ -1206,7 +1211,6 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
     }
   };
   
-  
   // // Handle input changes
   const handleTagChange = (index, field, value) => {
     const updatedTags = [...tagInputs];
@@ -1246,8 +1250,8 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
   return (
     <div className="dark min-h-screen bg-background py- text-foreground px-4 md:px-24 lg:px-60">
 
-      {!load ? (
-      <div className="flex  items-center justify-center bg-background -z-1 mt-[10rem]">
+      {!isPageDecided ? (
+      <div className="flex items-center justify-center bg-background -z-1 mt-[10rem]">
         <div className="flex flex-col items-center justify-center mx-auto">
           <div className="lds-ripple flex items-center justify-center">
             <div></div>
@@ -1277,7 +1281,10 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
             </div>
             <div className="px-4 py-8 text-center ">
               <p className="font-semibold text-lg py-2">Your subscription has expired.</p>
-              <p className="font-semibold text-md py-5 flex items-center justify-center gap-3">Visit the page below to activate your subscription. <FaAngleDoubleDown className="mr-2 h-4 w-4" /></p>
+              <p className="font-semibold text-md py-5 flex items-center justify-center gap-3">
+                Visit the page below to activate your subscription. 
+                <FaAngleDoubleDown className="mr-2 h-4 w-4" />
+              </p>
               <Link href="/dashboard/subscription" className="">
                 <Button 
                     variant="outline" 
@@ -1286,7 +1293,7 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                     <CreditCard className="w-4 h-4 mr-2" />
                     Subscription
                 </Button>
-            </Link>
+              </Link>
             </div>
           </Card>
         </div>
@@ -1295,208 +1302,210 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
 
         apiKey === "" || apiSecret === "" ? (
           <div className="w-full flex flex-col justify-center">
-          <Card className="mb-4 p-4 w-full">
-            <div className="font-bold">
-              <div>Subscription Details:</div>
-            </div>
-            <div className="flex items-center justify-center gap-12">
-              <p>Expires: {new Date(subscriptionDetails?.expires_at).toLocaleString()}</p>
-              <p>Time Remaining: {timeRemaining}</p>
-              <p className="bg-white/90 rounded-md p-2 text-black/70 font-medium">Status: {subscriptionDetails?.subStatus}</p>
-            </div>
-          </Card>
-
-          <Card className="w-full max-w-[50%] mx-auto">
-            <div className="text-3xl font-bold w-full text-center pt-8">
-              <h1>Invalid Api Keys</h1>
-            </div>
-            <div className="px-4 py-8 text-center ">
-              <p className="font-semibold text-lg py-2">You haven't provided your Api Keys.</p>
-              <p className="font-semibold text-md py-5 flex items-center justify-center gap-3">Visit the settings page to provide your keys. <FaAngleDoubleDown className="mr-2 h-4 w-4" /></p>
-              <Link href="/dashboard/settings" className="flex-1">
-                <Button 
-                    variant="outline" 
-                    className={`w-full ${pathname === "/dashboard/settings" ? "bg-accent text-accent-foreground" : ""}`}
-                >
-                    <Settings className="w-4 h-4 mr-2" />
-                    Settings
-                </Button>
-            </Link>
-            </div>
-          </Card>
-
-          </div>
-
-    ) : (
-
-        <div>
-          <h2 className="mb-4 text-xl font-bold text-white">Create New Listing</h2>
-
-          <div className="grid gap-8 md:grid-cols-2">
-            <div className="space-y-4 mx-auto md:mx-1 md:max-w-[70%]">
-              <Card className="border-accent bg-card p-4">
-                <div className="space-y-2">
-                  <Button
-                    className={`w-full ${
-                      isProcessing
-                        ? "cursor-not-allowed bg-gray-500"
-                        : isPosting
-                        ? "cursor-not-allowed bg-gray-500"
-                        : "bg-accent hover:bg-accent/90"
-                    } text-accent-foreground`}
-                    onClick={handlePostListing}
-                    disabled={isProcessing ?? isPosting}
-                  >
-                    {isProcessing
-                      ? "Starting Posting..."
-                      : isPosting
-                      ? "Posting Active..."
-                      : "Start Posting"}
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    className="w-full"
-                    onClick={handleStopPosting}
-                    disabled={!isPosting}
-                  >
-                    Stop Posting
-                  </Button>
-                  <Button
-                    className="w-full bg-[#9333EA] text-white hover:bg-[#9333EA]/90"
-                    onClick={() => setIsCustomModalOpen(true)}
-                  >
-                    CUSTOM ORDER
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    className="w-full"
-                    onClick={() => setIsDeleteModalOpen(true)}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete Listings
-                  </Button>
-                </div>
-              </Card>
-
-              <Card className="border-accent bg-card p-4">
-                <div className="space-y-2">
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setIsImportModalOpen(true)}
-                  >
-                    <Import className="mr-2 h-4 w-4" />
-                    Import URL
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setIsBulkModalOpen(true)}
-                  >
-                    <Link2 className="mr-2 h-4 w-4" />
-                    Get Bulk Links
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => {
-                      setIsNumListingModalOpen(true);
-                      handleCheckListings();
-                    }}
-                  >
-                    <ClipboardList className="mr-2 h-4 w-4" />
-                    Check Listings
-                  </Button>
-                </div>
-              </Card>
-            </div>
-
-            <Card className="border-accent bg-card p-4 w-[100%]">
-              <h3 className="mb-4 text-lg font-semibold text-white">
-                Available Listings to Post
-              </h3>
-              <div className="mb-4 flex items-center justify-between">
-                <Input
-                  placeholder="Search by name"
-                  className="w-2/3"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    checked={allSelected}
-                    onCheckedChange={handleSelectAll}
-                    id="select-all"
-                  />
-                  <label htmlFor="select-all" className="text-sm text-white">
-                    Select All
-                  </label>
-                </div>
+            <Card className="mb-4 p-4 w-full">
+              <div className="font-bold">
+                <div>Subscription Details:</div>
               </div>
+              <div className="flex items-center justify-center gap-12">
+                <p>Expires: {new Date(subscriptionDetails?.expires_at).toLocaleString()}</p>
+                <p>Time Remaining: {timeRemaining}</p>
+                <p className="bg-white/90 rounded-md p-2 text-black/70 font-medium">Status: {subscriptionDetails?.subStatus}</p>
+              </div>
+            </Card>
 
-              <div className="space-y-2">
-                {filteredResponse && (
-                  <div className="space-y-2">
-                    {filteredResponse.map((item) => (
-                      <div
-                        key={item.id}
-                        id={item.id}
-                        className="flex w-full items-center justify-between space-x-3 rounded-lg border border-border p-2 text-xl text-white hover:bg-accent hover:text-accent-foreground"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <Switch
-                            checked={selectedItems.some((sel) => sel.id === item.id)}
-                            onCheckedChange={(checked) => handleItemSelect(item, checked)}
-                          />
-                          {item.image_urls && item.image_urls[0] && (
-                            <img
-                              src={`http://localhost:8000/static/${item.image_urls[0]}`}
-                              alt={item.name}
-                              className="h-10 w-10 rounded-full"
-                            />
-                          )}
-                          <span className="text-xl">{item.name}</span>
-                        </div>
-
-                        <div className="flex items-center justify-center space-x-2">
-                          <form onSubmit={handleEditPrice}>
-                            <div className="flex items-center space-x-1 rounded-md border border-input bg-background p-1 text-sm">
-                              <span>$</span>
-                              <input
-                                  type="number"
-                                  id={`price-${item.id}`}
-                                  name="price"
-                                  defaultValue={parseFloat(item.price).toFixed(2)}
-                                  step="0.01"
-                                  className="h-6 w-16 bg-background focus-visible:outline-none"
-                                />
-                              <button
-                                className="flex items-center space-x-2 rounded-sm bg-primary p-1 text-primary-foreground hover:bg-primary/90"
-                                type="submit"
-                                onClick={() => setSelectedItem(item)}
-                                disabled={saving}
-                              >
-                                <BiSave className="mr-2 h-4 w-4" />Save 
-                              </button>
-                            </div>
-                          </form>
-
-                          <Button variant="outlineInverse" onClick={() => handleEditClick(item)}>
-                            <CiEdit className="mr-2 h-4 w-4" />
-                            Edit
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            <Card className="w-full max-w-[50%] mx-auto">
+              <div className="text-3xl font-bold w-full text-center pt-8">
+                <h1>Invalid Api Keys</h1>
+              </div>
+              <div className="px-4 py-8 text-center ">
+                <p className="font-semibold text-lg py-2">You haven't provided your Api Keys.</p>
+                <p className="font-semibold text-md py-5 flex items-center justify-center gap-3">
+                  Visit the settings page to provide your keys. 
+                  <FaAngleDoubleDown className="mr-2 h-4 w-4" />
+                </p>
+                <Link href="/dashboard/settings" className="flex-1">
+                  <Button 
+                      variant="outline" 
+                      className={`w-full ${pathname === "/dashboard/settings" ? "bg-accent text-accent-foreground" : ""}`}
+                  >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Settings
+                  </Button>
+                </Link>
               </div>
             </Card>
           </div>
-        </div>
-    )))}
+        ) : (
+
+          <div>
+            <h2 className="mb-4 text-xl font-bold text-white">Create New Listing</h2>
+
+            <div className="grid gap-8 md:grid-cols-2">
+              <div className="space-y-4 mx-auto md:mx-1 md:max-w-[70%]">
+                <Card className="border-accent bg-card p-4">
+                  <div className="space-y-2">
+                    <Button
+                      className={`w-full ${
+                        isProcessing
+                          ? "cursor-not-allowed bg-gray-500"
+                          : isPosting
+                          ? "cursor-not-allowed bg-gray-500"
+                          : "bg-accent hover:bg-accent/90"
+                      } text-accent-foreground`}
+                      onClick={handlePostListing}
+                      disabled={isProcessing ?? isPosting}
+                    >
+                      {isProcessing
+                        ? "Starting Posting..."
+                        : isPosting
+                        ? "Posting Active..."
+                        : "Start Posting"}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={handleStopPosting}
+                    >
+                      Stop Posting
+                    </Button>
+                    <Button
+                      className="w-full bg-[#9333EA] text-white hover:bg-[#9333EA]/90"
+                      onClick={() => setIsCustomModalOpen(true)}
+                    >
+                      CUSTOM ORDER
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={() => setIsDeleteModalOpen(true)}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete Listings
+                    </Button>
+                  </div>
+                </Card>
+
+                <Card className="border-accent bg-card p-4">
+                  <div className="space-y-2">
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setIsImportModalOpen(true)}
+                    >
+                      <Import className="mr-2 h-4 w-4" />
+                      Import URL
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setIsBulkModalOpen(true)}
+                    >
+                      <Link2 className="mr-2 h-4 w-4" />
+                      Get Bulk Links
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        setIsNumListingModalOpen(true);
+                        handleCheckListings();
+                      }}
+                    >
+                      <ClipboardList className="mr-2 h-4 w-4" />
+                      Check Listings
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+
+              <Card className="border-accent bg-card p-4 w-[100%]">
+                <h3 className="mb-4 text-lg font-semibold text-white">
+                  Available Listings to Post
+                </h3>
+                <div className="mb-4 flex items-center justify-between">
+                  <Input
+                    placeholder="Search by name"
+                    className="w-2/3"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={allSelected}
+                      onCheckedChange={handleSelectAll}
+                      id="select-all"
+                    />
+                    <label htmlFor="select-all" className="text-sm text-white">
+                      Select All
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {filteredResponse && (
+                    <div className="space-y-2">
+                      {filteredResponse.map((item) => (
+                        <div
+                          key={item.id}
+                          id={item.id}
+                          className="flex w-full items-center justify-between space-x-3 rounded-lg border border-border p-2 text-xl text-white hover:bg-accent hover:text-accent-foreground"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              checked={selectedItems.some((sel) => sel.id === item.id)}
+                              onCheckedChange={(checked) => handleItemSelect(item, checked)}
+                            />
+                            {item.image_urls && item.image_urls[0] && (
+                              <img
+                                src={item.image_urls[0].startsWith('http') ? item.image_urls[0] : `http://localhost:8000/static/${item.image_urls[0]}`}
+                                alt={item.name}
+                                className="h-10 w-10 rounded-full"
+                              />
+                            )}
+                            <span className="text-xl">{item.name}</span>
+                          </div>
+
+                          <div className="flex items-center justify-center space-x-2">
+                            <form onSubmit={handleEditPrice}>
+                              <div className="flex items-center space-x-1 rounded-md border border-input bg-background p-1 text-sm">
+                                <span>$</span>
+                                <input
+                                    type="number"
+                                    id={`price-${item.id}`}
+                                    name="price"
+                                    defaultValue={parseFloat(item.price).toFixed(2)}
+                                    step="0.01"
+                                    className="h-6 w-16 bg-background focus-visible:outline-none"
+                                  />
+                                <button
+                                  className="flex items-center space-x-2 rounded-sm bg-primary p-1 text-primary-foreground hover:bg-primary/90"
+                                  type="submit"
+                                  onClick={() => setSelectedItem(item)}
+                                  disabled={saving}
+                                >
+                                  <BiSave className="mr-2 h-4 w-4" />Save 
+                                </button>
+                              </div>
+                            </form>
+
+                            <Button variant="outlineInverse" onClick={() => handleEditClick(item)}>
+                              <CiEdit className="mr-2 h-4 w-4" />
+                              Edit
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </div>
+          </div>
+        )
+    )
+  )}
       
-      {load ? 
+      {isPageDecided ? 
       <div className="mt-8 flex justify-end">
         <Button variant="link" className="text-muted-foreground" onClick={() => signOut()}>
           Logout
@@ -1706,20 +1715,21 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                   />
                 )}
                 <div className="mt-2 flex flex-row justify-center items-end gap-3">
-                  <div><label htmlFor="custom-photo" className="block font-medium text-white/60">
-                    Change Photo:
-                  </label>
-                  <Input
-                    type="file"
-                    id="custom-photo"
-                    name="photo"
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                  /></div>
+                  <div>
+                    <label htmlFor="custom-photo" className="block font-medium text-white/60">
+                      Change Photo:
+                    </label>
+                    <Input
+                      type="file"
+                      id="custom-photo"
+                      name="photo"
+                      accept="image/*"
+                      onChange={handlePhotoChange}
+                    />
+                  </div>
                   <Button variant="default" onClick={() => uploadImage()}>
                     {isUploading ? (
                       <>
-                        {/* Spinner icon with animation */}
                         <BiLoaderCircle className="inline-block mr-2 animate-spin" />
                         Uploading Image
                       </>
@@ -1764,7 +1774,6 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                 >
                   {isUploading ? (
                     <>
-                      {/* Spinner icon with animation */}
                       <BiLoaderCircle className="inline-block mr-2 animate-spin" />
                       Uploading Image
                     </>
@@ -1789,7 +1798,7 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
           <div className="space-y-4 overflow-auto">
             <form onSubmit={handleEditSubmit} className="overflow-auto">
 
-            <div className="mb-4">
+              <div className="mb-4">
                 <label className="block font-medium text-white/60">Current Image:</label>
                 {editPhotoPreview ? (
                   <img
@@ -1851,7 +1860,6 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                   type="number"
                   id="price"
                   name="price"
-                  // defaultValue={selectedItem?.price}
                   defaultValue={parseFloat(selectedItem?.price).toFixed(2)}
                   step="0.01"
                   min="10"
@@ -2012,33 +2020,6 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
                   </SelectContent>
                 </Select>
               </div>
-{/* 
-              <div className="mb-4 flex flex-col items-center gap-4">
-                <label
-                    htmlFor="shipping-within-days"
-                  className="block font-medium text-white/60 text-left"
-                >
-                  Tag 1:
-                </label>
-                <div className="flex items-center justify-center gap-2">
-                  <Input
-                    type="number"
-                    id="id"
-                    name="shipping_within_days"
-                    defaultValue={selectedItem?.tag[0].id}
-                    min="1"
-                    required
-                  />
-                  <Input
-                    type="number"
-                    id="id-value"
-                    name="expire_in_days"
-                    defaultValue={selectedItem?.tag[0].other}
-                    min="3"
-                    required
-                  />
-                </div>
-              </div> */}
 
               <div className="mb-4">
                 <StructuredTagInput 
@@ -2076,29 +2057,29 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
             dangerouslySetInnerHTML={{ __html: alertMessage }}
           />
           <DialogFooter className="flex flex-row items-center justify-between sm:justify-between">
-          <div className="flex gap-2">
-            {customUrl.length > 0 && (
-                  <Button
-                    onClick={copyCustomLinks}
-                    variant="secondary"
-                    size="sm"
-                    className="flex items-center gap-1"
-                    disabled={copied}
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="h-4 w-4" />
-                        Copied!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-4 w-4" />
-                        Copy All
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
+            <div className="flex gap-2">
+              {customUrl.length > 0 && (
+                <Button
+                  onClick={copyCustomLinks}
+                  variant="secondary"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  disabled={copied}
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" />
+                      Copy All
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
             <Button onClick={() => setAlertModal(false)} variant="outline">
               Close
             </Button>
