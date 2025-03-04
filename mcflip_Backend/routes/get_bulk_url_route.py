@@ -71,13 +71,32 @@ def format_listing_url(listing: Dict) -> str:
 
 @router.get("/gameflip/listings")
 async def fetch_listings(apiKey: str = Header(...), apiSecret: str = Header(...)):
-    """Fetch and return unique GameFlip listings."""
+    """Fetch and return unique GameFlip listings based on combined properties."""
     async with aiohttp.ClientSession() as session:
         account_id = await get_account_id(session, apiKey, apiSecret)
         if not account_id:
             raise HTTPException(status_code=400, detail="Failed to retrieve account ID.")
 
         listings = await get_listings(session, account_id, apiKey, apiSecret)
-        unique_urls = list(set(format_listing_url(listing) for listing in listings))
+        
+        # Dictionary to track unique listings
+        unique_listings = {}
+        
+        for listing in listings:
+            # Create a combined key for uniqueness check
+            combined = (
+                f"{listing.get('name', '').strip().lower()}"
+                f"{str(listing.get('price', 0))}"
+                f"{listing.get('description', '').strip().lower()}"
+                f"{listing.get('platform', '').strip().lower()}"
+                f"{listing.get('category', '').strip().lower()}"
+                f"{str(listing.get('tags', []))}"
+            )
+            
+            # Store the listing URL using the combined key
+            unique_listings[combined] = format_listing_url(listing)
+        
+        # Get the unique URLs
+        unique_urls = list(unique_listings.values())
     
     return {"count": len(unique_urls), "urls": unique_urls}

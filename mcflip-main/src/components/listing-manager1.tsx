@@ -139,6 +139,7 @@ export function ListingManager() {
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [isPostingCustom, setIsPostingCustom] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
+  const [fetching, setFetching] = useState<boolean>(false);
 
   // Additional states
   const [importUrls, setImportUrls] = useState<string>("");
@@ -706,6 +707,7 @@ export function ListingManager() {
   // --------------
   const fetchBulkList = async (): Promise<void> => {
     setError("");
+    setFetching(true)
     try {
       const response = await axios.get("http://localhost:8000/api/gameflip/listings", {
         headers: {
@@ -716,6 +718,8 @@ export function ListingManager() {
       setUrls(response.data.urls);
     } catch {
       setError("Failed to fetch listings. Please try again.");
+    } finally {
+      setFetching(false)
     }
   };
 
@@ -1607,11 +1611,11 @@ const handleCustomPostListing = async (listing: Listing): Promise<void> => {
 
             <Button
               onClick={fetchBulkList}
-              disabled={false}
+              disabled={false || fetching}
               size="sm"
               className=""
             >
-              Get Links
+              {!fetching ? "Get Links" : "Loading Links..."}
             </Button>
           </DialogFooter>
         </DialogContent>
